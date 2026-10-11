@@ -5,9 +5,14 @@ export const Route = createFileRoute("/api/public/push-lembrete")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env["PUSH_CRON_SECRET"];
-        if (!secret || request.headers.get("x-cron-secret") !== secret) return new Response("Unauthorized", { status: 401 });
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        // O agendador lê o segredo de uma tabela só do servidor; comparamos com o mesmo valor.
+        const provided = request.headers.get("x-cron-secret") ?? "";
+        const { data: row } = await supabaseAdmin.from("app_internal").select("valor").eq("chave", "push_cron_secret").maybeSingle();
+        const secret = row?.valor ?? "";
+        let diff = secret.length === provided.length && secret.length > 0 ? 0 : 1;
+        for (let i = 0; i < Math.min(secret.length, provided.length); i++) diff |= secret.charCodeAt(i) ^ provided.charCodeAt(i);
+        if (diff !== 0) return new Response("Unauthorized", { status: 401 });
         const { enviarParaUsuario } = await import("@/lib/push.server");
         const { data: cfgs } = await supabaseAdmin
           .from("configuracoes")

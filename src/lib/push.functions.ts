@@ -4,9 +4,10 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { enviarParaUsuario } from "./push.server";
 import { inicioMesFinanceiro } from "./budget";
 
-export const obterChavePublica = createServerFn({ method: "GET" }).handler(async () => ({
-  chave: process.env["VAPID_PUBLIC_KEY"] ?? "",
-}));
+export const obterChavePublica = createServerFn({ method: "GET" }).handler(async () => {
+  const { getVapidKeys } = await import("./vapid.server");
+  return { chave: (await getVapidKeys()).publicKey };
+});
 
 export const enviarTeste = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
