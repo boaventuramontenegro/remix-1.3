@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Bell, Database, Download, Lock, Palette, SlidersHorizontal, Smartphone } from "lucide-react";
+import { Bell, ChevronRight, Database, Download, Lock, Palette, SlidersHorizontal, Smartphone } from "lucide-react";
 import { accountQuery, usePreferences, useSavePreferences, type Config } from "@/lib/preferences";
-import { createPin, enableBiometric, pinKey, readPin } from "@/lib/device-security";
+import { biometriaDisponivel, checkPin, createPin, emIframe, enableBiometric, limparSeguranca, pinKey, readPin, removeBiometric, removePin } from "@/lib/device-security";
 import { applyTheme } from "@/lib/theme";
 import { FORMAS_PAGAMENTO } from "@/lib/format";
 import { pageMeta } from "@/lib/page-meta";
@@ -15,6 +15,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BottomSheet } from "@/components/BottomSheet";
+import { ConfirmSheet } from "@/components/ConfirmSheet";
+import { CriarPinSheet, PedirPinSheet } from "@/components/PinPad";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => pageMeta("Configurações", "Tema, instalação, preferências, dados, notificações e segurança."),
@@ -24,12 +27,27 @@ export const Route = createFileRoute("/_authenticated/configuracoes")({
 const Row = ({ label, desc, children }: { label: string; desc?: string; children: ReactNode }) => (
   <div className="flex items-center justify-between gap-3 py-3"><div><p className="text-sm font-medium">{label}</p>{desc && <p className="text-xs text-muted-foreground">{desc}</p>}</div>{children}</div>
 );
-const Card = ({ icon: I, title, children }: { icon: typeof Bell; title: string; children: ReactNode }) => (
-  <section className="surface divide-y rounded-3xl"><h2 className="flex items-center gap-2 pb-3 font-semibold"><I size={18} className="text-primary" />{title}</h2>{children}</section>
-);
+
+/** Card memoizado: só re-renderiza quando seu conteúdo ou o indicador "Salvo ✓" muda. */
+const Card = memo(function Card({ icon: I, title, salvo, children }: { icon: typeof Bell; title: string; salvo?: boolean; children: ReactNode }) {
+  return (
+    <section className="surface divide-y rounded-3xl">
+      <h2 className="flex items-center gap-2 pb-3 font-semibold">
+        <I size={18} className="text-primary" />{title}
+        {salvo && <span className="ml-auto text-xs font-medium text-primary">Salvo ✓</span>}
+      </h2>
+      {children}
+    </section>
+  );
+});
+
 function Seg<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return <div className="flex rounded-xl bg-muted p-1">{options.map(([v, l]) => <button key={String(v)} type="button" onClick={() => onChange(v)} className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium ${value === v ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>{l}</button>)}</div>;
 }
+
+const chip = (on: boolean) => `rounded-full border px-3 py-1.5 text-sm font-medium transition ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background"}`;
+
+type Metodo = "off" | "bio" | "pin" | "ambos";
 
 function Configuracoes() {
   const { config } = usePreferences();
@@ -41,52 +59,136 @@ function Configuracoes() {
   const [instalado, setInstalado] = useState(false);
   const [ios, setIos] = useState(false);
   const [perm, setPerm] = useState<string>("default");
-  const [temPin, setTemPin] = useState(false);
-  const [bio, setBio] = useState(false);
-  const [apagar, setApagar] = useState(false);
-  useEffect(() => { setInstalado(isStandalone()); setIos(isIOS()); if ("Notification" in window) setPerm(Notification.permission); }, []);
-  useEffect(() => { if (user) { const r = readPin(user.id); setTemPin(!!r); setBio(!!r?.credential); } }, [user?.id]);
+  const [metodo, setMetodo] = useState<Metodo>("off");
+  const [bioOk, setBioOk] = useState<boolean | null>(null);
+  const [sheetDia, setSheetDia] = useState(false);
+  const [sheetCriarPin, setSheetCriarPin] = useState(false);
+  const [sheetPedirPin, setSheetPedirPin] = useState(false);
+  const [aposPin, setAposPin] = useState<() => void>(() => {});
+  const [confirmApagar, setConfirmApagar] = useState(false);
+  const [apagando, setApagando] = useState(false);
 
-  const set = async (patch: Partial<Config>) => {
-    try { await save.mutateAsync(patch); toast.success("Configuração salva"); } catch { toast.error("Não foi possível salvar."); }
+  // Indicador "Salvo ✓" + salvamento com debounce de 600 ms (UI atualiza na hora).
+  const [salvo, setSalvo] = useState(false);
+  const pendente = useRef<Partial<Config>>({});
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const esconder = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const set = (patch: Partial<Config>) => {
+    qc.setQueryData(["configuracoes"], (old: Config | undefined) => (old ? { ...old, ...patch } : old));
+    Object.assign(pendente.current, patch);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      const p = pendente.current;
+      pendente.current = {};
+      try {
+        await save.mutateAsync(p);
+        setSalvo(true);
+        clearTimeout(esconder.current);
+        esconder.current = setTimeout(() => setSalvo(false), 1500);
+      } catch {
+        toast.error("Não foi possível salvar.");
+        qc.invalidateQueries({ queryKey: ["configuracoes"] });
+      }
+    }, 600);
   };
+
+  useEffect(() => {
+    setInstalado(isStandalone());
+    setIos(isIOS());
+    if ("Notification" in window) setPerm(Notification.permission);
+    biometriaDisponivel().then(setBioOk);
+  }, []);
+  useEffect(() => {
+    if (!user) return;
+    const r = readPin(user.id);
+    const temPin = !!r?.hash, temBio = !!r?.credential;
+    setMetodo(temPin && temBio ? "ambos" : temPin ? "pin" : temBio ? "bio" : "off");
+  }, [user?.id]);
+
   const instalar = async () => { if (await install()) { setInstalado(true); toast.success("App instalado"); } };
 
-  const togglePin = async (on: boolean) => {
-    if (!user) return;
-    if (!on) { localStorage.removeItem(pinKey(user.id)); setTemPin(false); setBio(false); toast.success("PIN desativado"); return; }
-    const p = window.prompt("Crie um PIN de 4 dígitos");
-    if (!p) return;
-    if (window.prompt("Repita o PIN") !== p) { toast.error("Os PINs não conferem."); return; }
-    try { await createPin(user.id, p); setTemPin(true); toast.success("PIN ativado"); } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao criar PIN."); }
+  const ativarBio = async (): Promise<boolean> => {
+    if (!user) return false;
+    if (emIframe()) { toast("Abra o app publicado para usar a impressão digital", { id: "bio-iframe" }); return false; }
+    try { await enableBiometric(user.id); return true; }
+    catch { toast.error("Este aparelho não permitiu ativar a impressão digital."); return false; }
   };
-  const toggleBio = async (on: boolean) => {
-    if (!user) return;
-    if (!on) { const r = readPin(user.id); if (r) { delete r.credential; localStorage.setItem(pinKey(user.id), JSON.stringify(r)); } setBio(false); return; }
-    try { await enableBiometric(user.id); setBio(true); toast.success("Biometria ativada"); } catch { toast.error("Este aparelho não permitiu ativar a biometria."); }
+
+  /** Mudança de método de bloqueio. Remover PIN exige o PIN atual; criar PIN abre o teclado. */
+  const mudarMetodo = async (m: Metodo) => {
+    if (!user || m === metodo) return;
+    const temPin = metodo === "pin" || metodo === "ambos";
+    const querPin = m === "pin" || m === "ambos";
+    const querBio = m === "bio" || m === "ambos";
+    const temBio = metodo === "bio" || metodo === "ambos";
+
+    const aplicarRemocoes = () => {
+      if (!querPin && temPin) removePin(user.id);
+      if (!querBio && temBio) removeBiometric(user.id);
+      if (m === "off") limparSeguranca(user.id);
+      setMetodo(m);
+    };
+
+    // Se vai remover o PIN, primeiro confirma o PIN atual.
+    if (temPin && !querPin) {
+      setAposPin(() => () => { void continuar(); });
+      setSheetPedirPin(true);
+      return;
+    }
+    await continuar();
+
+    async function continuar() {
+      if (!user) return;
+      if (querPin && !temPin) {
+        // Cria o PIN primeiro; biometria (se pedida) entra depois.
+        setAposPin(() => async () => {
+          if (querBio && !temBio) { if (!(await ativarBio())) { setMetodo("pin"); return; } }
+          setMetodo(m);
+        });
+        setSheetCriarPin(true);
+        return;
+      }
+      if (querBio && !temBio) { if (!(await ativarBio())) return; }
+      aplicarRemocoes();
+    }
   };
+
+  const verificarPinAtual = async (pin: string) => {
+    if (!user) return false;
+    const ok = await checkPin(user.id, pin);
+    if (ok) aposPin();
+    return ok;
+  };
+
   const toggleNotif = async (on: boolean) => {
     if (on) {
       if (!("Notification" in window)) { toast.error(ios ? "No iPhone, instale o app na Tela de Início para receber notificações." : "Seu navegador não suporta notificações."); return; }
       const p = await Notification.requestPermission(); setPerm(p);
       if (p !== "granted") { toast.error("Permissão negada. Libere nas configurações do navegador."); return; }
       try { if (!(await assinarPush())) toast.message("As notificações funcionam no app publicado/instalado."); } catch { toast.error("Não foi possível ativar as notificações."); return; }
-      await set({ notif_ativas: true, fuso_horario: Intl.DateTimeFormat().resolvedOptions().timeZone });
-    } else { await cancelarPush().catch(() => {}); await set({ notif_ativas: false }); }
+      set({ notif_ativas: true, fuso_horario: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    } else { await cancelarPush().catch(() => {}); set({ notif_ativas: false }); }
   };
   const teste = async () => {
     try { const r = await enviarTeste(); r.enviados ? toast.success("Notificação enviada") : toast.error("Nenhum aparelho inscrito ainda."); } catch { toast.error("Não foi possível enviar."); }
   };
   const apagarGastos = async () => {
     if (!user) return;
+    setApagando(true);
+    // Apaga SOMENTE gastos; categorias e conta continuam.
     const { error } = await supabase.from("gastos").delete().eq("user_id", user.id);
+    setApagando(false);
     if (error) { toast.error("Não foi possível apagar."); return; }
-    setApagar(false); qc.invalidateQueries({ queryKey: ["gastos"] }); toast.success("Todos os gastos foram apagados");
+    setConfirmApagar(false); qc.invalidateQueries({ queryKey: ["gastos"] }); toast.success("Todos os gastos foram apagados");
   };
+
+  const metodoOpts: [Metodo, string][] = bioOk
+    ? [["off", "Desligado"], ["bio", "Digital"], ["pin", "PIN"], ["ambos", "Digital + PIN"]]
+    : [["off", "Desligado"], ["pin", "PIN"]];
 
   return (
     <div className="space-y-5">
-      <Card icon={Palette} title="Aparência">
+      <Card icon={Palette} title="Aparência" salvo={salvo}>
         <div className="py-3"><Seg value={config.tema} options={[["light", "Claro"], ["dark", "Escuro"], ["auto", "Automático"]]} onChange={(v) => { applyTheme(v); set({ tema: v }); }} /></div>
       </Card>
       <Card icon={Smartphone} title="Aplicativo">
@@ -96,28 +198,22 @@ function Configuracoes() {
           {!instalado && !ios && !canInstall && <p className="text-xs text-muted-foreground">Abra o app publicado no Chrome para instalar com um toque.</p>}
         </div>
       </Card>
-      <Card icon={SlidersHorizontal} title="Preferências">
+      <Card icon={SlidersHorizontal} title="Preferências" salvo={salvo}>
         <Row label="Semana começa"><Seg value={config.semana_inicia} options={[[1, "Segunda"], [0, "Domingo"]]} onChange={(v) => set({ semana_inicia: v })} /></Row>
-        <Row label="Mês começa no dia" desc="Seu mês financeiro">
-          <div className="flex items-center gap-3">
-            <Button size="icon" variant="outline" className="rounded-full" onClick={() => config.dia_inicio_mes > 1 && set({ dia_inicio_mes: config.dia_inicio_mes - 1 })}>−</Button>
-            <span className="w-6 text-center text-lg font-bold">{config.dia_inicio_mes}</span>
-            <Button size="icon" variant="outline" className="rounded-full" onClick={() => config.dia_inicio_mes < 28 && set({ dia_inicio_mes: config.dia_inicio_mes + 1 })}>+</Button>
-          </div>
-        </Row>
+        <button type="button" onClick={() => setSheetDia(true)} className="flex w-full items-center justify-between gap-3 py-3 text-left">
+          <div><p className="text-sm font-medium">Mês começa no dia</p><p className="text-xs text-muted-foreground">Seu mês financeiro</p></div>
+          <span className="flex items-center gap-1 text-sm font-semibold text-primary">Dia {config.dia_inicio_mes}<ChevronRight size={16} /></span>
+        </button>
         <div className="py-3"><p className="mb-2 text-sm font-medium">Pagamento padrão</p><div className="flex flex-wrap gap-2">{FORMAS_PAGAMENTO.map((f) => (
-          <button key={f.value} type="button" onClick={() => set({ pagamento_padrao: f.value })} className={`rounded-full border px-3 py-1.5 text-sm ${config.pagamento_padrao === f.value ? "border-primary bg-primary text-primary-foreground" : "border-input"}`}>{f.label}</button>
+          <button key={f.value} type="button" onClick={() => set({ pagamento_padrao: f.value })} className={chip(config.pagamento_padrao === f.value)}>{f.label}</button>
         ))}</div></div>
       </Card>
       <Card icon={Database} title="Dados">
-        <div className="space-y-2 py-3">
-          {!apagar ? <Button variant="outline" className="w-full rounded-xl text-destructive" onClick={() => setApagar(true)}>Apagar todos os gastos</Button> : (
-            <div className="space-y-2 rounded-xl bg-destructive/10 p-3"><p className="text-sm">Isso apaga <strong>todos os seus gastos</strong> para sempre. Sua conta e categorias continuam.</p>
-              <div className="flex gap-2"><Button variant="outline" className="flex-1 rounded-xl" onClick={() => setApagar(false)}>Cancelar</Button><Button variant="destructive" className="flex-1 rounded-xl" onClick={apagarGastos}>Apagar</Button></div></div>
-          )}
+        <div className="py-3">
+          <Button variant="outline" className="w-full rounded-xl text-destructive" onClick={() => setConfirmApagar(true)}>Apagar todos os gastos</Button>
         </div>
       </Card>
-      <Card icon={Bell} title="Notificações">
+      <Card icon={Bell} title="Notificações" salvo={salvo}>
         <Row label="Ativar notificações"><Switch checked={config.notif_ativas} onCheckedChange={toggleNotif} /></Row>
         {perm === "denied" && <p className="py-2 text-xs text-destructive">As notificações estão bloqueadas. Toque no cadeado ao lado do endereço (ou nas configurações do app) e permita notificações.</p>}
         {ios && !instalado && <p className="py-2 text-xs text-muted-foreground">No iPhone, as notificações só funcionam com o app instalado na Tela de Início.</p>}
@@ -125,12 +221,58 @@ function Configuracoes() {
         {config.notif_ativas && <Row label="Aviso de 80% do orçamento"><Switch checked={config.notif_limite_80} onCheckedChange={(v) => set({ notif_limite_80: v })} /></Row>}
         {config.notif_ativas && <div className="py-3"><Button variant="outline" className="w-full rounded-xl" onClick={teste}>Enviar notificação de teste</Button></div>}
       </Card>
-      <Card icon={Lock} title="Segurança neste aparelho">
-        <Row label="Bloquear com PIN" desc="Só um código seguro fica no aparelho"><Switch checked={temPin} onCheckedChange={togglePin} /></Row>
-        {temPin && <Row label="Desbloquear com biometria"><Switch checked={bio} onCheckedChange={toggleBio} /></Row>}
-        {temPin && <div className="py-3"><p className="mb-2 text-sm font-medium">Bloquear após</p><Seg value={config.pin_tempo_bloqueio} options={[[0, "Na hora"], [60, "1 min"], [300, "5 min"]]} onChange={(v) => set({ pin_tempo_bloqueio: v })} /></div>}
-        {temPin && <div className="py-3"><Button variant="ghost" className="w-full rounded-xl text-destructive" onClick={async () => { if (user) localStorage.removeItem(pinKey(user.id)); qc.clear(); await supabase.auth.signOut(); navigate({ to: "/auth", replace: true }); }}>Esqueci o PIN</Button></div>}
+      <Card icon={Lock} title="Segurança neste aparelho" salvo={salvo}>
+        <div className="py-3">
+          <p className="mb-2 text-sm font-medium">Bloqueio do app</p>
+          <Seg value={metodo} options={metodoOpts} onChange={(v) => void mudarMetodo(v)} />
+          {bioOk === false && <p className="mt-2 text-xs text-muted-foreground">Este aparelho não tem impressão digital disponível, por isso a opção ficou oculta.</p>}
+          {bioOk && emIframe() && <p className="mt-2 text-xs text-muted-foreground">Abra o app publicado para usar a impressão digital.</p>}
+        </div>
+        {(metodo === "pin" || metodo === "ambos") && (
+          <div className="py-3">
+            <p className="mb-2 text-sm font-medium">Bloquear de novo após</p>
+            <div className="flex flex-wrap gap-2">{([[0, "Na hora"], [60, "1 min"], [300, "5 min"]] as const).map(([v, l]) => (
+              <button key={v} type="button" className={chip(config.pin_tempo_bloqueio === v)} onClick={() => set({ pin_tempo_bloqueio: v })}>{l}</button>
+            ))}</div>
+          </div>
+        )}
+        {(metodo === "pin" || metodo === "ambos") && (
+          <div className="py-3">
+            <Button variant="outline" className="w-full rounded-xl" onClick={() => { setAposPin(() => () => setSheetCriarPin(true)); setSheetPedirPin(true); }}>Alterar PIN</Button>
+          </div>
+        )}
+        {metodo !== "off" && <div className="py-3"><Button variant="ghost" className="w-full rounded-xl text-destructive" onClick={async () => { if (user) localStorage.removeItem(pinKey(user.id)); qc.clear(); await supabase.auth.signOut(); navigate({ to: "/auth", replace: true }); }}>Esqueci o PIN</Button></div>}
       </Card>
+
+      <BottomSheet open={sheetDia} onOpenChange={setSheetDia} title="Mês começa no dia" description="Escolha o dia em que seu mês financeiro começa.">
+        <div className="grid grid-cols-7 gap-2 pb-2">
+          {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => { set({ dia_inicio_mes: d }); setSheetDia(false); }}
+              className={`flex h-10 items-center justify-center rounded-xl text-sm font-medium transition active:scale-95 ${config.dia_inicio_mes === d ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+            >{d}</button>
+          ))}
+        </div>
+      </BottomSheet>
+
+      <CriarPinSheet open={sheetCriarPin} onOpenChange={setSheetCriarPin} onCriar={async (pin) => {
+        if (!user) return;
+        await createPin(user.id, pin);
+        toast.success("PIN ativado");
+        aposPin();
+      }} />
+      <PedirPinSheet open={sheetPedirPin} onOpenChange={setSheetPedirPin} onVerificar={verificarPinAtual} />
+      <ConfirmSheet
+        open={confirmApagar}
+        onOpenChange={setConfirmApagar}
+        title="Apagar todos os gastos?"
+        description="Isso apaga todos os seus gastos para sempre. Suas categorias e sua conta continuam."
+        confirmLabel="Excluir"
+        busy={apagando}
+        onConfirm={apagarGastos}
+      />
     </div>
   );
 }
