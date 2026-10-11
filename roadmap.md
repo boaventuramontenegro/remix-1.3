@@ -1,8 +1,11 @@
-# Meu Bolso
-- [ ] 0 Brand and loading screen
-- [ ] A Header, profile bubble, signup/login
-- [ ] B Home, expenses, categories, reports
-- [ ] C Profile, exports, account deletion
-- [x] D Settings, device security and notifications (VAPID + reminder schedule configured)
-- [ ] E PWA assets, offline and recurrence
-- [ ] Verify signed-in flows and existing tests
+# Requested Meu Bolso adjustments
+- [ ] Reports-only export sheet with date/category filters and five formats
+- [ ] Calendar-year chart and aligned sticky annual table
+- [ ] Shared chart appearance, tooltip privacy and daily-average utility with tests
+- [ ] Current-week selectors and inline global eye controls
+- [ ] Profile name metadata, backfill and fallback
+- [ ] Expense/category confirmation sheets and category reassignment/deletion
+- [ ] Restore missing default categories and history-based suggestions
+- [ ] Dismissible budget alerts
+- [ ] Three independently scheduled timezone-aware push reminders
+- [ ] Verify signed-in workflows, screenshots and tests

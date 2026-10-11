@@ -92,6 +92,15 @@ export type Database = {
         Row: {
           dia_inicio_mes: number
           fuso_horario: string | null
+          lembrete_manha: boolean
+          lembrete_manha_horario: string
+          lembrete_manha_proximo: string | null
+          lembrete_noite: boolean
+          lembrete_noite_horario: string
+          lembrete_noite_proximo: string | null
+          lembrete_tarde: boolean
+          lembrete_tarde_horario: string
+          lembrete_tarde_proximo: string | null
           notif_ativas: boolean
           notif_horario: string
           notif_limite_80: boolean
@@ -108,6 +117,15 @@ export type Database = {
         Insert: {
           dia_inicio_mes?: number
           fuso_horario?: string | null
+          lembrete_manha?: boolean
+          lembrete_manha_horario?: string
+          lembrete_manha_proximo?: string | null
+          lembrete_noite?: boolean
+          lembrete_noite_horario?: string
+          lembrete_noite_proximo?: string | null
+          lembrete_tarde?: boolean
+          lembrete_tarde_horario?: string
+          lembrete_tarde_proximo?: string | null
           notif_ativas?: boolean
           notif_horario?: string
           notif_limite_80?: boolean
@@ -124,6 +142,15 @@ export type Database = {
         Update: {
           dia_inicio_mes?: number
           fuso_horario?: string | null
+          lembrete_manha?: boolean
+          lembrete_manha_horario?: string
+          lembrete_manha_proximo?: string | null
+          lembrete_noite?: boolean
+          lembrete_noite_horario?: string
+          lembrete_noite_proximo?: string | null
+          lembrete_tarde?: boolean
+          lembrete_tarde_horario?: string
+          lembrete_tarde_proximo?: string | null
           notif_ativas?: boolean
           notif_horario?: string
           notif_limite_80?: boolean
@@ -264,6 +291,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      excluir_categoria_com_gastos: {
+        Args: {
+          _categoria: string
+          _destino?: string
+          _excluir_gastos?: boolean
+        }
+        Returns: undefined
+      }
       excluir_minha_conta: { Args: never; Returns: undefined }
       lancar_recorrentes: { Args: never; Returns: number }
     }
