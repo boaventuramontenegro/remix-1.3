@@ -1,8 +1,8 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useLocation } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { BarChart3, Eye, EyeOff, Home, List, Plus, Tags } from "lucide-react";
-import { OcultarSync, useOcultarValores } from "@/lib/ocultar";
+import { BarChart3, Home, List, Plus, Tags } from "lucide-react";
+import { OcultarSync } from "@/lib/ocultar";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { GastoSheetProvider, useGastoSheet } from "@/components/GastoSheet";
@@ -81,18 +81,9 @@ function BottomNav() {
   );
 }
 
-function OlhoButton() {
-  const { ocultos, alternar } = useOcultarValores();
-  return (
-    <Button variant="outline" size="icon" onClick={alternar} aria-label={ocultos ? "Mostrar valores" : "Ocultar valores"} aria-pressed={ocultos} className="h-10 w-10 rounded-full">
-      {ocultos ? <EyeOff /> : <Eye />}
-    </Button>
-  );
-}
-
 function Header() {
   const path=useLocation().pathname;
   const titles: Record<string,string> = {'/gastos':'Gastos','/categorias':'Categorias','/relatorios':'Relatórios','/perfil':'Meu perfil','/configuracoes':'Configurações','/ajuda':'Ajuda e sugestão'};
-  return <header className="flex items-center justify-between px-4 pb-5 pt-5">{path==='/inicio' ? <Logo tamanho="sm" /> : <h1 className="text-2xl font-bold">{titles[path] || 'Meu Bolso'}</h1>}<div className="flex items-center gap-2"><OlhoButton /><ProfileMenu /></div></header>;
+  return <header className="flex items-center justify-between px-4 pb-5 pt-5">{path==='/inicio' ? <Logo tamanho="sm" /> : <h1 className="text-2xl font-bold">{titles[path] || 'Meu Bolso'}</h1>}<ProfileMenu /></header>;
 }
 

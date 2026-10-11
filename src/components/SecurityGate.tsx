@@ -20,25 +20,27 @@ export function SecurityGate({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const rec = user ? readPin(user.id) : null;
-  const temPin = !!rec;
+  const temPin = !!rec?.hash;
   const temBio = !!rec?.credential;
+  const temTrava = temPin || temBio;
 
   useEffect(() => {
     if (!user) return;
     const reset = localStorage.getItem('meubolso-forgot-pin');
     if (reset === user.id) { localStorage.removeItem(pinKey(user.id)); localStorage.removeItem('meubolso-forgot-pin'); }
-    setLocked(!!readPin(user.id));
+    const trava = () => { const r = readPin(user.id); return !!(r && (r.hash || r.credential)); };
+    setLocked(trava());
     let hiddenAt = 0;
     const cb = () => {
       if (document.hidden) { hiddenAt = Date.now(); }
-      else if (hiddenAt && Date.now() - hiddenAt >= config.pin_tempo_bloqueio * 1000 && readPin(user.id)) { setLocked(true); setPin(''); }
+      else if (hiddenAt && Date.now() - hiddenAt >= config.pin_tempo_bloqueio * 1000 && trava()) { setLocked(true); setPin(''); }
     };
     document.addEventListener('visibilitychange', cb);
     return () => document.removeEventListener('visibilitychange', cb);
   }, [user?.id, config.pin_tempo_bloqueio]);
 
   useEffect(() => {
-    const lock = () => { if (user && readPin(user.id)) { setLocked(true); setPin(''); setFalhas(0); } };
+    const lock = () => { const r = user ? readPin(user.id) : null; if (r && (r.hash || r.credential)) { setLocked(true); setPin(''); setFalhas(0); } };
     window.addEventListener('meubolso-bloquear', lock);
     return () => window.removeEventListener('meubolso-bloquear', lock);
   }, [user?.id]);

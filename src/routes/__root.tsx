@@ -16,7 +16,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { registerServiceWorker } from "@/lib/pwa";
 import { LoadingScreen } from "@/components/Logo";
-import { themeInitScript } from "@/lib/theme";
+import { themeInitScript, useTemaResolvido } from "@/lib/theme";
 
 function NotFoundComponent() {
   return (
@@ -132,7 +132,14 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
-      <Toaster position="top-center" />
+      <ToasterGlobal />
     </QueryClientProvider>
   );
+}
+
+/** Um aviso por vez, seguindo o tema claro/escuro do app. */
+function ToasterGlobal() {
+  const tema = useTemaResolvido();
+  return <Toaster position="top-center" visibleToasts={1} theme={tema} />;
+}
 }
