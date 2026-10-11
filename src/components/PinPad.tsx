@@ -45,6 +45,44 @@ export function BolinhasPin({ quantas, dark, tremor }: { quantas: number; dark?:
   );
 }
 
+/** Bottom sheet que pede o PIN atual (4 bolinhas + teclado) e confirma com onOk. */
+export function PedirPinSheet({ open, onOpenChange, titulo = "Confirmar PIN", onVerificar }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  titulo?: string;
+  onVerificar: (pin: string) => Promise<boolean>;
+}) {
+  const [pin, setPin] = useState("");
+  const [erro, setErro] = useState("");
+  const [tremor, setTremor] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const fechar = (v: boolean) => { if (!v) { setPin(""); setErro(""); } onOpenChange(v); };
+
+  const completou = async (v: string) => {
+    setBusy(true);
+    try {
+      if (await onVerificar(v)) { fechar(false); return; }
+      setErro("PIN incorreto");
+      setTremor(true);
+      setTimeout(() => { setTremor(false); setPin(""); }, 350);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível verificar.");
+      setPin("");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <BottomSheet open={open} onOpenChange={fechar} title={titulo} description="Digite seu PIN atual de 4 dígitos.">
+      <div className="flex flex-col items-center gap-6 py-2">
+        <BolinhasPin quantas={pin.length} tremor={tremor} />
+        {erro && <p className="text-sm text-destructive">{erro}</p>}
+        <TecladoPin valor={pin} onChange={setPin} disabled={busy} onDigits={completou} />
+      </div>
+    </BottomSheet>
+  );
+}
+
 /** Bottom sheet "Criar PIN" com 4 bolinhas e teclado próprio; confirma e avisa se não coincidir. */
 export function CriarPinSheet({ open, onOpenChange, onCriar }: {
   open: boolean;
