@@ -142,4 +142,3 @@ function ToasterGlobal() {
   const tema = useTemaResolvido();
   return <Toaster position="top-center" visibleToasts={1} theme={tema} />;
 }
-}
