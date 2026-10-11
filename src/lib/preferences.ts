@@ -1,0 +1,11 @@
+import { queryOptions, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
+export type Config = Database['public']['Tables']['configuracoes']['Row'];
+export const defaults = { tema: 'auto', semana_inicia: 1, dia_inicio_mes: 1, pagamento_padrao: 'pix', renda_mensal: null, notif_ativas: false, notif_horario: '20:00', notif_limite_80: true, pin_tempo_bloqueio: 60, timezone: 'America/Sao_Paulo', ocultar_valores: false, fuso_horario: null, ultimo_lembrete: null };
+export const preferencesQuery = queryOptions({ queryKey: ['configuracoes'], queryFn: async () => { const { data, error } = await supabase.from('configuracoes').select('*').single(); if(error) throw error; return data; }});
+export const profileQuery = queryOptions({ queryKey: ['perfil'], queryFn: async () => { const {data,error} = await supabase.from('perfis').select('*').single(); if(error) throw error; return data; }});
+export function usePreferences() { const q = useQuery(preferencesQuery); return { ...q, config: q.data ?? defaults }; }
+export function useSavePreferences() { const qc = useQueryClient(); return useMutation({ onMutate: (patch: Partial<Config>) => { qc.setQueryData(['configuracoes'], (old: Config | undefined) => old ? { ...old, ...patch } : old); }, mutationFn: async (patch: Partial<Config>) => { const {data:{user}} = await supabase.auth.getUser(); if(!user) throw Error('Entre novamente'); const {error} = await supabase.from('configuracoes').upsert({...patch,user_id:user.id}); if(error) throw error; }, onError: () => qc.invalidateQueries({queryKey:['configuracoes']}) }); }
+export function useSaveProfile() { const qc = useQueryClient(); return useMutation({ mutationFn: async (nome: string) => { const {data:{user}} = await supabase.auth.getUser(); if(!user) throw Error('Entre novamente'); const {error}=await supabase.from('perfis').upsert({user_id:user.id,nome:nome.trim()}); if(error) throw error; }, onSuccess: () => qc.invalidateQueries({queryKey:['perfil']}) }); }
+export const accountQuery = queryOptions({queryKey:['conta'], queryFn: async () => {const {data,error}=await supabase.auth.getUser(); if(error) throw error; return data.user;}});
