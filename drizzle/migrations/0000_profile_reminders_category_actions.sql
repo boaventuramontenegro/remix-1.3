@@ -1,0 +1,17 @@
+ALTER TABLE public.configuracoes ADD COLUMN IF NOT EXISTS lembrete_manha boolean NOT NULL DEFAULT true, ADD COLUMN IF NOT EXISTS lembrete_manha_horario time NOT NULL DEFAULT '09:00', ADD COLUMN IF NOT EXISTS lembrete_tarde boolean NOT NULL DEFAULT true, ADD COLUMN IF NOT EXISTS lembrete_tarde_horario time NOT NULL DEFAULT '14:00', ADD COLUMN IF NOT EXISTS lembrete_noite boolean NOT NULL DEFAULT true, ADD COLUMN IF NOT EXISTS lembrete_noite_horario time NOT NULL DEFAULT '20:00', ADD COLUMN IF NOT EXISTS lembrete_manha_proximo timestamptz, ADD COLUMN IF NOT EXISTS lembrete_tarde_proximo timestamptz, ADD COLUMN IF NOT EXISTS lembrete_noite_proximo timestamptz;
+COMMENT ON COLUMN public.configuracoes.notif_horario IS 'DEPRECATED: replaced by three lembrete_*_horario fields';
+COMMENT ON COLUMN public.configuracoes.ultimo_lembrete IS 'DEPRECATED: replaced by three lembrete_*_proximo fields';
+CREATE OR REPLACE FUNCTION public.meubolso_signup() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$ BEGIN
+INSERT INTO public.perfis(user_id,nome) VALUES(NEW.id,coalesce(NEW.raw_user_meta_data->>'nome',NEW.raw_user_meta_data->>'full_name','')) ON CONFLICT(user_id) DO UPDATE SET nome=EXCLUDED.nome WHERE coalesce(perfis.nome,'')='';
+INSERT INTO public.configuracoes(user_id) VALUES(NEW.id) ON CONFLICT DO NOTHING;
+INSERT INTO public.categorias(user_id,nome,icone,cor) VALUES (NEW.id,'Contas','receipt','#0ea5e9'),(NEW.id,'Mercado','shopping-cart','#22c55e'),(NEW.id,'Veículo','car','#f97316'),(NEW.id,'Moradia','home','#a16207'),(NEW.id,'Saúde','heart-pulse','#ef4444'),(NEW.id,'Educação','graduation-cap','#6366f1'),(NEW.id,'Lazer','party-popper','#ec4899'),(NEW.id,'Transporte','bus','#14b8a6'),(NEW.id,'Outros','tag','#64748b') ON CONFLICT(user_id,nome) DO NOTHING; RETURN NEW; END $$;
+DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='auth.users'::regclass AND tgfoid='public.meubolso_signup()'::regprocedure) THEN CREATE TRIGGER meubolso_signup AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.meubolso_signup(); END IF; IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='auth.users'::regclass AND tgfoid='public.meubolso_cleanup()'::regprocedure) THEN CREATE TRIGGER meubolso_cleanup BEFORE DELETE ON auth.users FOR EACH ROW EXECUTE FUNCTION public.meubolso_cleanup(); END IF; END $$;
+REVOKE ALL ON FUNCTION public.meubolso_signup() FROM PUBLIC,anon,authenticated;
+CREATE OR REPLACE FUNCTION public.excluir_categoria_com_gastos(_categoria uuid,_destino uuid DEFAULT NULL,_excluir_gastos boolean DEFAULT false) RETURNS void LANGUAGE plpgsql SET search_path=public AS $$ BEGIN
+IF auth.uid() IS NULL THEN RAISE EXCEPTION 'not authenticated'; END IF;
+IF NOT EXISTS(SELECT 1 FROM categorias WHERE id=_categoria AND user_id=auth.uid()) THEN RAISE EXCEPTION 'category not found'; END IF;
+IF _destino IS NOT NULL AND (_destino=_categoria OR NOT EXISTS(SELECT 1 FROM categorias WHERE id=_destino AND user_id=auth.uid())) THEN RAISE EXCEPTION 'invalid destination'; END IF;
+IF _excluir_gastos THEN DELETE FROM gastos WHERE categoria_id=_categoria AND user_id=auth.uid(); ELSE UPDATE gastos SET categoria_id=_destino WHERE categoria_id=_categoria AND user_id=auth.uid(); END IF;
+DELETE FROM categorias WHERE id=_categoria AND user_id=auth.uid(); END $$;
+REVOKE ALL ON FUNCTION public.excluir_categoria_com_gastos(uuid,uuid,boolean) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.excluir_categoria_com_gastos(uuid,uuid,boolean) TO authenticated;

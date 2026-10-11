@@ -163,5 +163,11 @@
 
 .surface { background: var(--card); border-radius: 1.5rem; padding: 1.25rem; box-shadow: var(--shadow-soft); }
 .field { width: 100%; height: 2.75rem; border: 1px solid var(--input); border-radius: .75rem; background: var(--background); padding: 0 .75rem; }
-.chart-tooltip { background: var(--popover); border: 1px solid var(--border); border-radius: .75rem; padding: .75rem; color: var(--foreground); }
+.chart-tooltip { background: var(--popover); border: 1.5px solid var(--border); border-radius: .75rem; padding: .75rem; color: var(--foreground); box-shadow: var(--shadow-soft); }
+:root { --chart-selected: color-mix(in srgb, var(--primary) 65%, var(--card)); --sticky-edge-shadow: 3px 0 8px -4px var(--foreground); }
+.annual-category { position: sticky; left: 0; z-index: 2; min-width: 120px; background: var(--card); box-shadow: var(--sticky-edge-shadow); }
+.annual-total { position: sticky; right: 0; z-index: 2; min-width: 108px; background: var(--card); }
+.annual-month { width: 96px; min-width: 96px; }
+.recharts-wrapper, .recharts-wrapper *, .recharts-surface, .recharts-sector, .recharts-rectangle { outline: none !important; -webkit-tap-highlight-color: transparent; }
+.recharts-tooltip-wrapper { max-width: min(224px, calc(100vw - 48px)); }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
