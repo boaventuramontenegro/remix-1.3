@@ -8,3 +8,8 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Rules
+- VAPID keys are derived at runtime from the `VAPID_SEED` backend secret (src/lib/vapid.server.ts); never store VAPID keys in code — keeps the private key out of every file and log.
+- The reminder cron authenticates with a random secret stored in `public.app_internal` (service-role only), read by pg_cron and the route — no shared secret ever leaves the backend.
+- Push service worker only registers on the published site (src/lib/pwa.ts guard) — the Lovable preview cannot receive push.
