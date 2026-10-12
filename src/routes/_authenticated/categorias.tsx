@@ -92,7 +92,7 @@ function CategoriaForm({ cat, onDone }: { cat: Partial<Categoria>; onDone: () =>
     if (!cat.id) return;
     setBusy(true);
     try {
-      const {error}=await supabase.rpc('excluir_categoria_com_gastos',{_categoria:cat.id,_destino:destino ?? undefined,_excluir_gastos:temGastos&&modo==='excluir'});
+      const {error}=await supabase.rpc('excluir_categoria_com_gastos',{_categoria:cat.id,...(destino?{_destino:destino}:{}),_excluir_gastos:temGastos&&modo==='excluir'});
       if(error) throw error;
       await Promise.all([qc.invalidateQueries({queryKey:['categorias']}),qc.invalidateQueries({queryKey:['gastos']})]);
       toast.success('Categoria excluída'); onDone();
