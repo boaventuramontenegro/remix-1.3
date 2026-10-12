@@ -1,4 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { Button } from '@/components/ui/button';
 import { Eye, EyeOff } from 'lucide-react';
 import { formatBRL, setValoresOcultos, valoresOcultos } from './format';
 import { usePreferences, useSavePreferences } from './preferences';
@@ -27,7 +28,7 @@ export function useOcultarValores() {
 export function OlhoInline({ variante = 'neutro' }: { variante?: 'claro' | 'neutro' }) {
   const { ocultos, alternar } = useOcultarValores();
   return (
-    <button
+    <Button variant="ghost" size="icon"
       type="button"
       onClick={(e) => { e.stopPropagation(); alternar(); }}
       aria-label={ocultos ? 'Mostrar valores' : 'Ocultar valores'}
@@ -35,7 +36,7 @@ export function OlhoInline({ variante = 'neutro' }: { variante?: 'claro' | 'neut
       className={`flex h-11 w-11 items-center justify-center rounded-full transition active:scale-95 ${variante === 'claro' ? 'text-brand-white' : 'text-muted-foreground'}`}
     >
       {ocultos ? <EyeOff size={22} /> : <Eye size={22} />}
-    </button>
+    </Button>
   );
 }
 

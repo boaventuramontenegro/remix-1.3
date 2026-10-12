@@ -2,12 +2,12 @@ import { useValoresOcultos } from '@/lib/ocultar';
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Download, KeyRound, LogOut, Trash2 } from "lucide-react";
+import { ArrowLeft, KeyRound, LogOut, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { accountQuery, profileQuery, useSaveProfile } from "@/lib/preferences";
-import { categoriasQuery, gastosTodosQuery } from "@/lib/queries";
-import { exportarGastos, type Formato } from "@/lib/exportar";
-import { fmt, toISODate } from "@/lib/format";
+import { gastosTodosQuery } from "@/lib/queries";
+
+import { fmt } from "@/lib/format";
 import { pageMeta } from "@/lib/page-meta";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/_authenticated/perfil")({
-  head: () => pageMeta("Meu perfil", "Seu nome, senha, exportação de dados e conta."),
+  head: () => pageMeta("Meu perfil", "Seu nome, senha e conta no Meu Bolso."),
   component: Perfil,
 });
 
@@ -25,15 +25,12 @@ function Perfil() {useValoresOcultos();
   const { data: perfil } = useQuery(profileQuery);
   const { data: user } = useQuery(accountQuery);
   const { data: gastos = [] } = useQuery(gastosTodosQuery);
-  const { data: cats = [] } = useQuery(categoriasQuery);
   const save = useSaveProfile();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [nome, setNome] = useState("");
   const [senha, setSenha] = useState("");
   const [senha2, setSenha2] = useState("");
-  const [formato, setFormato] = useState<Formato>("pdf");
-  const [per, setPer] = useState<"mes" | "ano" | "tudo">("mes");
   const [confirma, setConfirma] = useState("");
   useEffect(() => { if (perfil) setNome(perfil.nome); }, [perfil?.nome]);
 
@@ -46,13 +43,6 @@ function Perfil() {useValoresOcultos();
     const { error } = await supabase.auth.updateUser({ password: senha });
     if (error) { toast.error("Não foi possível alterar a senha."); return; }
     setSenha(""); setSenha2(""); toast.success("Senha alterada");
-  };
-  const exportar = async () => {
-    const hoje = new Date();
-    const lista = gastos.filter((g) => per === "tudo" || (per === "ano" ? g.data.startsWith(String(hoje.getFullYear())) : g.data.startsWith(toISODate(hoje).slice(0, 7))));
-    if (!lista.length) { toast.error("Nenhum gasto nesse período."); return; }
-    try { await exportarGastos(formato, lista, cats, `meu-bolso-${per}-${toISODate(hoje)}`); toast.success("Arquivo baixado"); }
-    catch { toast.error("Não foi possível gerar o arquivo."); }
   };
   const sair = async () => { qc.clear(); await supabase.auth.signOut(); navigate({ to: "/auth", replace: true }); };
   const excluirConta = async () => {
@@ -82,14 +72,6 @@ function Perfil() {useValoresOcultos();
         <Input type="password" placeholder="Nova senha" autoComplete="new-password" value={senha} onChange={(e) => setSenha(e.target.value)} className="h-11 rounded-xl" />
         <Input type="password" placeholder="Confirmar senha" autoComplete="new-password" value={senha2} onChange={(e) => setSenha2(e.target.value)} className="h-11 rounded-xl" />
         <Button variant="outline" className="w-full rounded-xl" onClick={trocarSenha}><KeyRound />Alterar senha</Button>
-      </section>
-      <section className="surface space-y-3">
-        <h2 className="font-semibold">Exportar dados</h2>
-        <p className="text-xs text-muted-foreground">Formato</p>
-        <div className="flex flex-wrap gap-2">{([["pdf", "PDF"], ["txt", "TXT"], ["csv", "CSV"], ["xlsx", "Excel"]] as const).map(([v, l]) => <button key={v} type="button" className={chip(formato === v)} onClick={() => setFormato(v)}>{l}</button>)}</div>
-        <p className="text-xs text-muted-foreground">Período</p>
-        <div className="flex flex-wrap gap-2">{([["mes", "Mês atual"], ["ano", "Ano atual"], ["tudo", "Tudo"]] as const).map(([v, l]) => <button key={v} type="button" className={chip(per === v)} onClick={() => setPer(v)}>{l}</button>)}</div>
-        <Button variant="outline" className="w-full rounded-xl" onClick={exportar}><Download />Baixar arquivo</Button>
       </section>
       <Button variant="outline" className="h-11 w-full rounded-xl" onClick={sair}><LogOut />Sair da conta</Button>
       <section className="space-y-3 rounded-2xl border border-destructive/40 bg-destructive/5 p-4">

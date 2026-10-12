@@ -1,4 +1,4 @@
-import { useValoresOcultos } from '@/lib/ocultar';
+import { OlhoInline, useValoresOcultos } from '@/lib/ocultar';
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -55,7 +55,7 @@ function GastosPage() {useValoresOcultos();
       </div>
       <div className="surface flex items-center justify-between">
         <span className="text-sm text-muted-foreground">{lista.length} gasto(s)</span>
-        <strong className="text-lg tabular-nums">{formatBRL(total)}</strong>
+        <div className="flex min-w-0 items-center gap-2"><strong className="text-lg tabular-nums">{formatBRL(total)}</strong><OlhoInline /></div>
       </div>
       {error ? <p role="alert" className="text-destructive">Não foi possível carregar seus gastos.</p>
         : isPending ? <p className="text-center text-muted-foreground">Carregando…</p>
