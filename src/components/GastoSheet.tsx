@@ -1,3 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
+import { ConfirmSheet } from './ConfirmSheet';
+import { sugerirCategoria } from '@/lib/sugerir-categoria';
+import { dataSaoPaulo } from '@/lib/media';
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
@@ -9,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CategoriaIcone } from "@/lib/icons";
 import { FORMAS_PAGAMENTO, formatBRL, toISODate } from "@/lib/format";
 import { usePreferences } from "@/lib/preferences";
-import { useCategorias, useExcluirGasto, useSalvarGasto, type Gasto } from "@/lib/queries";
+import { gastosTodosQuery, useCategorias, useExcluirGasto, useSalvarGasto, type Gasto } from "@/lib/queries";
 
 type Ctx = { abrir: (g?: Gasto) => void };
 const GastoCtx = createContext<Ctx>({ abrir: () => {} });
@@ -44,16 +48,24 @@ function GastoForm({ gasto, onDone }: { gasto?: Gasto | undefined; onDone: () =>
   const {config} = usePreferences();
   const [centavos, setCentavos] = useState(gasto ? String(Math.round(Number(gasto.valor) * 100)) : "");
   const [categoriaId, setCategoriaId] = useState<string | null>(gasto?.categoria_id ?? null);
-  const [data, setData] = useState(gasto?.data ?? toISODate(new Date()));
+  const [data, setData] = useState(gasto?.data ?? toISODate(dataSaoPaulo()));
   const [descricao, setDescricao] = useState(gasto?.descricao ?? "");
   const [forma, setForma] = useState(gasto?.forma_pagamento ?? config.pagamento_padrao);
   const [recorrente, setRecorrente] = useState(gasto?.recorrente ?? false);
   const [obs, setObs] = useState(gasto?.observacao ?? "");
 
+  const { data: historico = [] } = useQuery(gastosTodosQuery);
+  const [manual, setManual] = useState(!!gasto);
+  const [confirmar, setConfirmar] = useState(false);
+  const sugerida = manual ? null : sugerirCategoria(descricao, historico, categorias);
   useEffect(() => {
-    const first=categorias[0];
-    if (!categoriaId && first) setCategoriaId(first.id);
-  }, [categorias, categoriaId]);
+    if (!manual) setCategoriaId(sugerida ?? categorias[0]?.id ?? null);
+  }, [sugerida, categorias, manual]);
+  const remover = async () => {
+    if (!gasto) return;
+    try { await excluir.mutateAsync(gasto.id); toast.success('Gasto excluído'); onDone(); }
+    catch { toast.error('Não foi possível excluir.'); }
+  };
 
   const valor = Number(centavos || "0") / 100;
 
@@ -100,11 +112,11 @@ function GastoForm({ gasto, onDone }: { gasto?: Gasto | undefined; onDone: () =>
             <Button variant="outline"
               type="button"
               key={c.id}
-              onClick={() => setCategoriaId(c.id)}
+              onClick={() => { setManual(true); setCategoriaId(c.id); }}
               className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-sm font-medium transition ${categoriaId === c.id ? "border-primary bg-accent text-accent-foreground" : "border-border bg-card"}`}
             >
               <CategoriaIcone icone={c.icone} cor={c.cor} size={14} className="rounded-full" />
-              {c.nome}
+              {c.nome}{sugerida === c.id && <span className="text-xs text-primary">Sugerida</span>}
             </Button>
           ))}
         </div>
@@ -144,7 +156,8 @@ function GastoForm({ gasto, onDone }: { gasto?: Gasto | undefined; onDone: () =>
       <Button type="submit" disabled={salvar.isPending} className="h-12 w-full rounded-xl text-base">
         {salvar.isPending ? "Salvando..." : "Salvar"}
       </Button>
-      {gasto && <Button type="button" variant="ghost" className="w-full text-destructive" disabled={excluir.isPending} onClick={async()=>{if(!window.confirm("Excluir este gasto? Esta ação não pode ser desfeita."))return;try{await excluir.mutateAsync(gasto.id);toast.success("Gasto excluído");onDone();}catch{toast.error("Não foi possível excluir.");}}}>Excluir gasto</Button>}
+      {gasto && <Button type="button" variant="ghost" className="w-full text-destructive" onClick={() => setConfirmar(true)}>Excluir gasto</Button>}
+      <ConfirmSheet open={confirmar} onOpenChange={setConfirmar} title="Excluir este gasto?" description="Esta ação não pode ser desfeita." busy={excluir.isPending} onConfirm={remover} />
     </form>
   );
 }
