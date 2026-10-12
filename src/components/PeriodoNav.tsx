@@ -1,3 +1,5 @@
+import { Button } from './ui/button';
+import { dataSaoPaulo } from '@/lib/media';
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { fmt, rangeOf, shift, type Periodo } from "@/lib/format";
 
@@ -9,7 +11,7 @@ export function PeriodoNav({ periodo, anchor, onAnchor, config }: {
   config: { semana_inicia: number; dia_inicio_mes: number };
 }) {
   const r = rangeOf(periodo, anchor, config);
-  const agora = new Date();
+  const agora = dataSaoPaulo();
   const atual = (() => {
     const ra = rangeOf(periodo, agora, config);
     return r.start.getTime() === ra.start.getTime();
@@ -32,21 +34,21 @@ export function PeriodoNav({ periodo, anchor, onAnchor, config }: {
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl bg-card p-2 shadow-soft">
-      <button type="button" aria-label="Período anterior" className={seta} onClick={() => onAnchor(shift(periodo, anchor, -1))}><ChevronLeft size={20} /></button>
-      <button
+      <Button variant="ghost" type="button" aria-label="Período anterior" className={seta} onClick={() => onAnchor(shift(periodo, anchor, -1))}><ChevronLeft size={20} /></Button>
+      <Button variant="ghost"
         type="button"
-        onClick={() => onAnchor(new Date())}
+        onClick={() => onAnchor(dataSaoPaulo())}
         title="Voltar ao período atual"
-        className="flex-1 rounded-xl px-2 py-1 text-center transition-colors duration-150"
+        className="flex-1 h-auto rounded-xl px-2 py-1 text-center transition-colors duration-150"
         key={`${periodo}-${r.start.getTime()}`}
       >
         <span className="flex items-center justify-center gap-2">
-          <span className="text-base font-bold">{linha1}</span>
+          <span className="text-lg font-bold">{linha1}</span>
           {periodo === "semana" && atual && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">Esta semana</span>}
         </span>
         {linha2 && <span className="block text-xs text-muted-foreground">{linha2}</span>}
-      </button>
-      <button type="button" aria-label="Próximo período" className={seta} onClick={() => onAnchor(shift(periodo, anchor, 1))}><ChevronRight size={20} /></button>
+      </Button>
+      <Button variant="ghost" type="button" aria-label="Próximo período" className={seta} onClick={() => onAnchor(shift(periodo, anchor, 1))}><ChevronRight size={20} /></Button>
     </div>
   );
 }

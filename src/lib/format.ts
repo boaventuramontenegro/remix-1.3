@@ -25,7 +25,7 @@ export const OCULTO = "R$ ••••";
 export const formatBRL = (v: number, opts?: { sempre?: boolean }) => (ocultos && !opts?.sempre ? OCULTO : brl.format(v || 0));
 /** Rótulos compactos para eixos: R$ 0, R$ 500, R$ 1 mil, R$ 1,5 mi. */
 export const formatBRLCompacto = (v: number) => {
-  if (ocultos) return "R$ ••";
+  if (ocultos) return OCULTO;
   const n = Number(v) || 0;
   if (Math.abs(n) >= 1_000_000) return `R$ ${(n / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
   if (Math.abs(n) >= 1000) return `R$ ${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;

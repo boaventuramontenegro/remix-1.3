@@ -61,6 +61,9 @@ function Configuracoes() {
   const [perm, setPerm] = useState<string>("default");
   const [metodo, setMetodo] = useState<Metodo>("off");
   const [bioOk, setBioOk] = useState<boolean | null>(null);
+  const [horarioSheet, setHorarioSheet] = useState<"manha" | "tarde" | "noite" | null>(null);
+  const [hora, setHora] = useState("09");
+  const [minuto, setMinuto] = useState("00");
   const [sheetDia, setSheetDia] = useState(false);
   const [sheetCriarPin, setSheetCriarPin] = useState(false);
   const [sheetPedirPin, setSheetPedirPin] = useState(false);
@@ -217,7 +220,7 @@ function Configuracoes() {
         <Row label="Ativar notificações"><Switch checked={config.notif_ativas} onCheckedChange={toggleNotif} /></Row>
         {perm === "denied" && <p className="py-2 text-xs text-destructive">As notificações estão bloqueadas. Toque no cadeado ao lado do endereço (ou nas configurações do app) e permita notificações.</p>}
         {ios && !instalado && <p className="py-2 text-xs text-muted-foreground">No iPhone, as notificações só funcionam com o app instalado na Tela de Início.</p>}
-        {config.notif_ativas && <Row label="Lembrete diário" desc="Horário para lembrar de registrar"><Input type="time" className="h-10 w-28 rounded-xl" defaultValue={String(config.notif_horario).slice(0, 5)} onBlur={(e) => e.target.value && set({ notif_horario: e.target.value })} /></Row>}
+        {(['manha','tarde','noite'] as const).map(turno=><Row key={turno} label={turno==='manha'?'Manhã':turno==='tarde'?'Tarde':'Noite'}><div className="flex items-center gap-2"><Button variant="ghost" onClick={()=>{const [h,m]=config[`lembrete_${turno}_horario`].split(':');setHora(h ?? '09');setMinuto(m ?? '00');setHorarioSheet(turno);}}>{config[`lembrete_${turno}_horario`].slice(0,5)}<ChevronRight size={16}/></Button><Switch aria-label={`Lembrete ${turno}`} checked={config[`lembrete_${turno}`]} onCheckedChange={v=>set({[`lembrete_${turno}`]:v})}/></div></Row>)}
         {config.notif_ativas && <Row label="Aviso de 80% do orçamento"><Switch checked={config.notif_limite_80} onCheckedChange={(v) => set({ notif_limite_80: v })} /></Row>}
         {config.notif_ativas && <div className="py-3"><Button variant="outline" className="w-full rounded-xl" onClick={teste}>Enviar notificação de teste</Button></div>}
       </Card>
@@ -244,6 +247,10 @@ function Configuracoes() {
         {metodo !== "off" && <div className="py-3"><Button variant="ghost" className="w-full rounded-xl text-destructive" onClick={async () => { if (user) localStorage.removeItem(pinKey(user.id)); qc.clear(); await supabase.auth.signOut(); navigate({ to: "/auth", replace: true }); }}>Esqueci o PIN</Button></div>}
       </Card>
 
+      <BottomSheet open={!!horarioSheet} onOpenChange={o=>!o&&setHorarioSheet(null)} title="Horário do lembrete">
+        <div className="grid grid-cols-2 gap-4"><div><p className="mb-2 text-sm font-medium">Hora</p><div className="grid max-h-60 grid-cols-3 gap-1 overflow-y-auto">{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(h=><Button key={h} variant={hora===h?'default':'outline'} onClick={()=>setHora(h)}>{h}</Button>)}</div></div><div><p className="mb-2 text-sm font-medium">Minuto</p><div className="grid max-h-60 grid-cols-3 gap-1 overflow-y-auto">{Array.from({length:60},(_,i)=>String(i).padStart(2,'0')).map(m=><Button key={m} variant={minuto===m?'default':'outline'} onClick={()=>setMinuto(m)}>{m}</Button>)}</div></div></div>
+        <Button className="mt-4 h-12 w-full" onClick={()=>{if(horarioSheet)set({[`lembrete_${horarioSheet}_horario`]:`${hora}:${minuto}`, fuso_horario:Intl.DateTimeFormat().resolvedOptions().timeZone});setHorarioSheet(null);}}>Salvar horário</Button>
+      </BottomSheet>
       <BottomSheet open={sheetDia} onOpenChange={setSheetDia} title="Mês começa no dia" description="Escolha o dia em que seu mês financeiro começa.">
         <div className="grid grid-cols-7 gap-2 pb-2">
           {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
