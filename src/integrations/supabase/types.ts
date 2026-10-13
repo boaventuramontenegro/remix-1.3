@@ -106,6 +106,7 @@ export type Database = {
           notif_limite_80: boolean
           ocultar_valores: boolean
           pagamento_padrao: string
+          pin_tema: string
           pin_tempo_bloqueio: number
           renda_mensal: number | null
           semana_inicia: number
@@ -131,6 +132,7 @@ export type Database = {
           notif_limite_80?: boolean
           ocultar_valores?: boolean
           pagamento_padrao?: string
+          pin_tema?: string
           pin_tempo_bloqueio?: number
           renda_mensal?: number | null
           semana_inicia?: number
@@ -156,6 +158,7 @@ export type Database = {
           notif_limite_80?: boolean
           ocultar_valores?: boolean
           pagamento_padrao?: string
+          pin_tema?: string
           pin_tempo_bloqueio?: number
           renda_mensal?: number | null
           semana_inicia?: number
