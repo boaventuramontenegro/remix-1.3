@@ -4,7 +4,6 @@ import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Bell, ChevronRight, Database, Download, Lock, Palette, SlidersHorizontal, Smartphone } from "lucide-react";
 import { accountQuery, usePreferences, useSavePreferences, type Config } from "@/lib/preferences";
-import { biometriaDisponivel, checkPin, createPin, emIframe, enableBiometric, limparSeguranca, pinKey, readPin, removeBiometric, removePin } from "@/lib/device-security";
 import { applyTheme } from "@/lib/theme";
 import { FORMAS_PAGAMENTO } from "@/lib/format";
 import { pageMeta } from "@/lib/page-meta";
@@ -17,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BottomSheet } from "@/components/BottomSheet";
 import { ConfirmSheet } from "@/components/ConfirmSheet";
-import { CriarPinSheet, PedirPinSheet } from "@/components/PinPad";
+import { DeviceSecuritySettings } from "@/components/DeviceSecuritySettings";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => pageMeta("Configurações", "Tema, instalação, preferências, dados, notificações e segurança."),
@@ -47,7 +46,6 @@ function Seg<T extends string | number>({ value, options, onChange }: { value: T
 
 const chip = (on: boolean) => `rounded-full border px-3 py-1.5 text-sm font-medium transition ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background"}`;
 
-type Metodo = "off" | "bio" | "pin" | "ambos";
 
 function Configuracoes() {
   const { config } = usePreferences();
@@ -59,15 +57,10 @@ function Configuracoes() {
   const [instalado, setInstalado] = useState(false);
   const [ios, setIos] = useState(false);
   const [perm, setPerm] = useState<string>("default");
-  const [metodo, setMetodo] = useState<Metodo>("off");
-  const [bioOk, setBioOk] = useState<boolean | null>(null);
   const [horarioSheet, setHorarioSheet] = useState<"manha" | "tarde" | "noite" | null>(null);
   const [hora, setHora] = useState("09");
   const [minuto, setMinuto] = useState("00");
   const [sheetDia, setSheetDia] = useState(false);
-  const [sheetCriarPin, setSheetCriarPin] = useState(false);
-  const [sheetPedirPin, setSheetPedirPin] = useState(false);
-  const [aposPin, setAposPin] = useState<() => void>(() => {});
   const [confirmApagar, setConfirmApagar] = useState(false);
   const [apagando, setApagando] = useState(false);
 
@@ -99,69 +92,8 @@ function Configuracoes() {
     setInstalado(isStandalone());
     setIos(isIOS());
     if ("Notification" in window) setPerm(Notification.permission);
-    biometriaDisponivel().then(setBioOk);
   }, []);
-  useEffect(() => {
-    if (!user) return;
-    const r = readPin(user.id);
-    const temPin = !!r?.hash, temBio = !!r?.credential;
-    setMetodo(temPin && temBio ? "ambos" : temPin ? "pin" : temBio ? "bio" : "off");
-  }, [user?.id]);
-
   const instalar = async () => { if (await install()) { setInstalado(true); toast.success("App instalado"); } };
-
-  const ativarBio = async (): Promise<boolean> => {
-    if (!user) return false;
-    if (emIframe()) { toast("Abra o app publicado para usar a impressão digital", { id: "bio-iframe" }); return false; }
-    try { await enableBiometric(user.id); return true; }
-    catch { toast.error("Este aparelho não permitiu ativar a impressão digital."); return false; }
-  };
-
-  /** Mudança de método de bloqueio. Remover PIN exige o PIN atual; criar PIN abre o teclado. */
-  const mudarMetodo = async (m: Metodo) => {
-    if (!user || m === metodo) return;
-    const temPin = metodo === "pin" || metodo === "ambos";
-    const querPin = m === "pin" || m === "ambos";
-    const querBio = m === "bio" || m === "ambos";
-    const temBio = metodo === "bio" || metodo === "ambos";
-
-    const aplicarRemocoes = () => {
-      if (!querPin && temPin) removePin(user.id);
-      if (!querBio && temBio) removeBiometric(user.id);
-      if (m === "off") limparSeguranca(user.id);
-      setMetodo(m);
-    };
-
-    // Se vai remover o PIN, primeiro confirma o PIN atual.
-    if (temPin && !querPin) {
-      setAposPin(() => () => { void continuar(); });
-      setSheetPedirPin(true);
-      return;
-    }
-    await continuar();
-
-    async function continuar() {
-      if (!user) return;
-      if (querPin && !temPin) {
-        // Cria o PIN primeiro; biometria (se pedida) entra depois.
-        setAposPin(() => async () => {
-          if (querBio && !temBio) { if (!(await ativarBio())) { setMetodo("pin"); return; } }
-          setMetodo(m);
-        });
-        setSheetCriarPin(true);
-        return;
-      }
-      if (querBio && !temBio) { if (!(await ativarBio())) return; }
-      aplicarRemocoes();
-    }
-  };
-
-  const verificarPinAtual = async (pin: string) => {
-    if (!user) return false;
-    const ok = await checkPin(user.id, pin);
-    if (ok) aposPin();
-    return ok;
-  };
 
   const toggleNotif = async (on: boolean) => {
     if (on) {
@@ -184,10 +116,6 @@ function Configuracoes() {
     if (error) { toast.error("Não foi possível apagar."); return; }
     setConfirmApagar(false); qc.invalidateQueries({ queryKey: ["gastos"] }); toast.success("Todos os gastos foram apagados");
   };
-
-  const metodoOpts: [Metodo, string][] = bioOk
-    ? [["off", "Desligado"], ["bio", "Digital"], ["pin", "PIN"], ["ambos", "Digital + PIN"]]
-    : [["off", "Desligado"], ["pin", "PIN"]];
 
   return (
     <div className="space-y-5">
@@ -225,26 +153,7 @@ function Configuracoes() {
         {config.notif_ativas && <div className="py-3"><Button variant="outline" className="w-full rounded-xl" onClick={teste}>Enviar notificação de teste</Button></div>}
       </Card>
       <Card icon={Lock} title="Segurança neste aparelho" salvo={salvo}>
-        <div className="py-3">
-          <p className="mb-2 text-sm font-medium">Bloqueio do app</p>
-          <Seg value={metodo} options={metodoOpts} onChange={(v) => void mudarMetodo(v)} />
-          {bioOk === false && <p className="mt-2 text-xs text-muted-foreground">Este aparelho não tem impressão digital disponível, por isso a opção ficou oculta.</p>}
-          {bioOk && emIframe() && <p className="mt-2 text-xs text-muted-foreground">Abra o app publicado para usar a impressão digital.</p>}
-        </div>
-        {(metodo === "pin" || metodo === "ambos") && (
-          <div className="py-3">
-            <p className="mb-2 text-sm font-medium">Bloquear de novo após</p>
-            <div className="flex flex-wrap gap-2">{([[0, "Na hora"], [60, "1 min"], [300, "5 min"]] as const).map(([v, l]) => (
-              <button key={v} type="button" className={chip(config.pin_tempo_bloqueio === v)} onClick={() => set({ pin_tempo_bloqueio: v })}>{l}</button>
-            ))}</div>
-          </div>
-        )}
-        {(metodo === "pin" || metodo === "ambos") && (
-          <div className="py-3">
-            <Button variant="outline" className="w-full rounded-xl" onClick={() => { setAposPin(() => () => setSheetCriarPin(true)); setSheetPedirPin(true); }}>Alterar PIN</Button>
-          </div>
-        )}
-        {metodo !== "off" && <div className="py-3"><Button variant="ghost" className="w-full rounded-xl text-destructive" onClick={async () => { if (user) localStorage.removeItem(pinKey(user.id)); qc.clear(); await supabase.auth.signOut(); navigate({ to: "/auth", replace: true }); }}>Esqueci o PIN</Button></div>}
+        {user && <DeviceSecuritySettings userId={user.id} themeId={config.pin_tema} timeout={config.pin_tempo_bloqueio} onTimeout={v => set({ pin_tempo_bloqueio: v })} onTheme={v => set({ pin_tema: v })} />}
       </Card>
 
       <BottomSheet open={!!horarioSheet} onOpenChange={o=>!o&&setHorarioSheet(null)} title="Horário do lembrete">
@@ -264,13 +173,6 @@ function Configuracoes() {
         </div>
       </BottomSheet>
 
-      <CriarPinSheet open={sheetCriarPin} onOpenChange={setSheetCriarPin} onCriar={async (pin) => {
-        if (!user) return;
-        await createPin(user.id, pin);
-        toast.success("PIN ativado");
-        aposPin();
-      }} />
-      <PedirPinSheet open={sheetPedirPin} onOpenChange={setSheetPedirPin} onVerificar={verificarPinAtual} />
       <ConfirmSheet
         open={confirmApagar}
         onOpenChange={setConfirmApagar}

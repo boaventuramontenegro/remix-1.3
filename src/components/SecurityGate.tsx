@@ -1,14 +1,13 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Fingerprint } from 'lucide-react';
-import { Logo, LoadingScreen } from './Logo';
+import { LoadingScreen } from './Logo';
+import { LockScreen } from './LockScreen';
 import { Button } from './ui/button';
-import { TecladoPin, BolinhasPin } from './PinPad';
 import { accountQuery, usePreferences } from '@/lib/preferences';
-import { readPin, checkPin, pinKey, biometricUnlock, biometriaDisponivel, emIframe } from '@/lib/device-security';
+import { readPin, checkPin, biometricUnlock, biometriaDisponivel, limparSeguranca, registerFailure, resetFailures } from '@/lib/device-security';
+import { readPinTheme } from '@/lib/pinThemes';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 
 export function SecurityGate({ children }: { children: ReactNode }) {
   const { data: user, isPending } = useQuery(accountQuery);
@@ -16,101 +15,109 @@ export function SecurityGate({ children }: { children: ReactNode }) {
   const [locked, setLocked] = useState<boolean | null>(null);
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
-  const [falhas, setFalhas] = useState(0);
+  const busyRef = useRef(false);
+  const [showPin, setShowPin] = useState(false);
+  const [message, setMessage] = useState('');
+  const [tremor, setTremor] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const [version, setVersion] = useState(0);
+  const [theme, setTheme] = useState('classico');
+  const lockEpoch = useRef(0);
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const rec = user ? readPin(user.id) : null;
-  const temPin = !!rec?.hash;
-  const temBio = !!rec?.credential;
-  const temTrava = temPin || temBio;
+  const rec = user && locked !== null ? readPin(user.id) : null;
+  const hasPin = !!rec?.hash;
+  const hasBio = !!rec?.credential && rec.biometricEnabled !== false;
+  const retryAt = rec?.retryAt ?? 0;
+  const cooling = retryAt > now;
+  const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
+  void version;
 
   useEffect(() => {
-    if (!user) return;
-    const reset = localStorage.getItem('meubolso-forgot-pin');
-    if (reset === user.id) { localStorage.removeItem(pinKey(user.id)); localStorage.removeItem('meubolso-forgot-pin'); }
-    const trava = () => { const r = readPin(user.id); return !!(r && (r.hash || r.credential)); };
-    setLocked(trava());
-    let hiddenAt = 0;
-    const cb = () => {
-      if (document.hidden) { hiddenAt = Date.now(); }
-      else if (hiddenAt && Date.now() - hiddenAt >= config.pin_tempo_bloqueio * 1000 && trava()) { setLocked(true); setPin(''); }
+    if (!user) { setLocked(false); return; }
+    const lock = () => {
+      lockEpoch.current++;
+      const r = readPin(user.id);
+      const bio = !!r?.credential && r.biometricEnabled !== false;
+      setLocked(!!r?.hash || bio);
+      setShowPin(!!r?.hash && !bio);
+      setPin(''); setMessage(''); setNow(Date.now());
+      setTheme(readPinTheme(user.id, config.pin_tema));
     };
-    document.addEventListener('visibilitychange', cb);
-    return () => document.removeEventListener('visibilitychange', cb);
+    lock();
+    let hiddenAt: number | null = null;
+    const visibility = () => {
+      if (document.hidden) hiddenAt = Date.now();
+      else if (hiddenAt !== null) {
+        if (Date.now() - hiddenAt >= config.pin_tempo_bloqueio * 1000) lock();
+        hiddenAt = null;
+      }
+    };
+    const refresh = () => {
+      setVersion(v => v + 1);
+      const r = readPin(user.id);
+      if (!r?.hash && !(r?.credential && r.biometricEnabled !== false)) setLocked(false);
+    };
+    const themeChanged = () => setTheme(readPinTheme(user.id, config.pin_tema));
+    document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('meubolso-bloquear', lock);
+    window.addEventListener('meubolso-seguranca', refresh);
+    window.addEventListener('meubolso-pin-tema', themeChanged);
+    return () => { document.removeEventListener('visibilitychange', visibility); window.removeEventListener('meubolso-bloquear', lock); window.removeEventListener('meubolso-seguranca', refresh); window.removeEventListener('meubolso-pin-tema', themeChanged); };
   }, [user?.id, config.pin_tempo_bloqueio]);
 
   useEffect(() => {
-    const lock = () => { const r = user ? readPin(user.id) : null; if (r && (r.hash || r.credential)) { setLocked(true); setPin(''); setFalhas(0); } };
-    window.addEventListener('meubolso-bloquear', lock);
-    return () => window.removeEventListener('meubolso-bloquear', lock);
-  }, [user?.id]);
+    if (!locked || !retryAt || retryAt <= Date.now()) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [locked, retryAt]);
 
-  const tentarBio = async () => {
-    if (!user) return;
-    if (emIframe()) { toast('Abra o app publicado para usar a impressão digital', { id: 'bio-iframe' }); return; }
-    try { await biometricUnlock(user.id); setLocked(false); setPin(''); }
-    catch { toast.error('Não foi possível usar a impressão digital.'); }
+  const tryBio = async () => {
+    if (!user || busyRef.current || (readPin(user.id)?.retryAt ?? 0) > Date.now()) return;
+    const epoch = lockEpoch.current;
+    busyRef.current = true; setBusy(true);
+    try {
+      if (!(await biometriaDisponivel())) throw Error('unavailable');
+      await biometricUnlock(user.id);
+      if (epoch !== lockEpoch.current) return;
+      resetFailures(user.id); setLocked(false); setPin('');
+    } catch {
+      if (epoch !== lockEpoch.current) return;
+      if (readPin(user.id)?.hash) { setShowPin(true); setMessage('Não foi possível usar a digital. Digite seu PIN.'); }
+      else { registerFailure(user.id); setMessage('Digital não reconhecida. Toque para tentar de novo.'); }
+      setNow(Date.now()); setVersion(v => v + 1);
+    } finally { busyRef.current = false; setBusy(false); }
   };
 
-  // Pede a impressão digital automaticamente ao bloquear, se configurada e suportada.
   useEffect(() => {
-    if (!locked || !temBio || !user) return;
-    let vivo = true;
-    biometriaDisponivel().then((ok) => { if (ok && vivo) tentarBio(); });
-    return () => { vivo = false; };
-  }, [locked, temBio, user?.id]);
+    if (!locked || !hasBio) return;
+    // Exactly one automatic verification per lock; retries are explicitly tapped.
+    void tryBio();
+  }, [locked, user?.id]);
 
   const unlock = async (next: string) => {
-    setPin(next);
-    if (next.length !== 4 || !user) return;
-    setBusy(true);
+    if (!user || busyRef.current || (readPin(user.id)?.retryAt ?? 0) > Date.now()) return;
+    busyRef.current = true; setBusy(true); setPin(next);
     try {
-      if (await checkPin(user.id, next)) { setLocked(false); setPin(''); setFalhas(0); }
-      else {
-        const n = falhas + 1;
-        setFalhas(n);
-        if (n >= 5) { await sairConta(); return; }
-        toast.error('PIN incorreto.');
-        setPin('');
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não foi possível desbloquear.');
-      setPin('');
-    } finally { setBusy(false); }
+      if (await checkPin(user.id, next)) { setLocked(false); setPin(''); }
+      else { setMessage('PIN incorreto.'); setTremor(true); navigator.vibrate?.(40); setTimeout(() => { setTremor(false); setPin(''); }, 300); }
+    } catch { setMessage('Aguarde antes de tentar novamente.'); setPin(''); }
+    finally { setNow(Date.now()); setVersion(v => v + 1); busyRef.current = false; setBusy(false); }
   };
 
-  const sairConta = async () => {
-    if (!user) return;
-    localStorage.setItem('meubolso-forgot-pin', user.id);
-    await qc.cancelQueries();
-    qc.clear();
-    await supabase.auth.signOut();
+  const recover = async () => {
+    if (!user || !rec?.recoveryAllowed || cooling) return;
+    setBusy(true);
+    const { error } = await supabase.auth.signOut();
+    if (error) { setMessage('Não foi possível sair. Tente novamente.'); setBusy(false); return; }
+    limparSeguranca(user.id);
+    await qc.cancelQueries(); qc.clear();
     navigate({ to: '/auth', replace: true });
   };
-
   if (isPending || locked === null) return <LoadingScreen />;
   if (!locked) return children;
-
-  return (
-    <div className="fixed inset-0 z-[80] overflow-y-auto bg-hero text-brand-white">
-      <div className="mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center gap-8 px-8 py-10">
-        <Logo variante="claro" tamanho="lg" />
-        <h1 className="text-xl font-semibold">Desbloquear Meu Bolso</h1>
-        {temBio && (
-          <Button variant="ghost" className="h-12 rounded-2xl border border-brand-white/20 text-brand-white hover:bg-brand-white/20 hover:text-brand-white" onClick={tentarBio}>
-            <Fingerprint /> Usar impressão digital
-          </Button>
-        )}
-        {temPin && (
-          <>
-            <BolinhasPin quantas={pin.length} dark />
-            <TecladoPin valor={pin} onChange={setPin} disabled={busy} onDigits={unlock} dark />
-          </>
-        )}
-        <Button variant="ghost" className="text-brand-white hover:bg-brand-white/20 hover:text-brand-white" onClick={sairConta}>
-          Entrar com e-mail e senha
-        </Button>
-      </div>
-    </div>
-  );
+  return <LockScreen themeId={theme} tamanho={rec?.length ?? 4} pin={pin} onPinChange={setPin} onComplete={unlock} showPin={hasPin && showPin} showBio={hasBio} onBio={() => void tryBio()} busy={busy || cooling} tremor={tremor} message={cooling ? `Aguarde ${remaining} s para tentar novamente.` : message}>
+    {cooling && showPin && <p className="lock-hint">Aguarde {remaining} s</p>}
+    {rec?.recoveryAllowed && !cooling && <Button variant="ghost" className="text-brand-white hover:bg-brand-white/20 hover:text-brand-white text-xs" disabled={busy} onClick={recover}>Entrar com e-mail e senha</Button>}
+  </LockScreen>;
 }
