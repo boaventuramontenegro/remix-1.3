@@ -22,7 +22,7 @@ export default defineConfig({
         filename: "sw.js",
         manifest: false, // served from public/manifest.webmanifest
         workbox: {
-          globPatterns: ["**/*.{js,css,png,svg,ico,webmanifest,woff2}"],
+          globPatterns: ["**/*.{js,css,png,webp,svg,ico,webmanifest,woff2}"],
           navigateFallback: null,
           cleanupOutdatedCaches: true,
           importScripts: ["/push-sw.js"],

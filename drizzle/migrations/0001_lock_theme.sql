@@ -1,0 +1,1 @@
+ALTER TABLE public.configuracoes ADD COLUMN IF NOT EXISTS pin_tema text NOT NULL DEFAULT 'classico';

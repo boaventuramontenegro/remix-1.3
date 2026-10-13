@@ -1,4 +1,7 @@
 # Requested Meu Bolso adjustments
+- [ ] A: Independent device security, biometric-first lock, 4–8 digit PIN and delayed recovery
+- [ ] B: Three lock themes, optimized wallpaper, full-screen previews and saved theme
+- [ ] C: Diagnose VAPID/subscription failures, repair registration and report device status
 - [ ] Reports-only export sheet with date/category filters and five formats
 - [ ] Calendar-year chart and aligned sticky annual table
 - [ ] Shared chart appearance, tooltip privacy and daily-average utility with tests
