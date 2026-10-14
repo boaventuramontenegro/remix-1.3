@@ -25,13 +25,13 @@ export function setThemeColor(color: string) {
   else metas.forEach(m => { m.content = color; });
 }
 export function restoreAppBars() {
-  delete document.documentElement.dataset.lockBars;
+  delete document.documentElement.dataset['lockBars'];
   document.documentElement.style.removeProperty('--system-bar-bottom');
   setThemeColor(BRAND_BAR_COLOR);
 }
 export function applyLockBars(themeId: string) {
   const theme = getPinTheme(themeId);
-  document.documentElement.dataset.lockBars = theme.token;
+  document.documentElement.dataset['lockBars'] = theme.token;
   document.documentElement.style.setProperty('--system-bar-bottom', theme.navBarColor);
   setThemeColor(theme.statusBarColor);
 }

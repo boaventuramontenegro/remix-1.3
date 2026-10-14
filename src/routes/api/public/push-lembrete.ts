@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
 import { deveLembrar, agoraNoFuso } from "@/lib/budget";
+import type { Database } from '@/integrations/supabase/types';
 
 const TURNOS = ["manha", "tarde", "noite"] as const;
 
@@ -25,7 +26,9 @@ export const Route = createFileRoute("/api/public/push-lembrete")({
             try { r = deveLembrar(String(c[`lembrete_${t}_horario`]).slice(0, 5), fuso, ultimo); } catch { continue; }
             if (!r.enviar) continue;
             const field = `lembrete_${t}_proximo` as const;
-            let claim = supabaseAdmin.from('configuracoes').update({ [field]: new Date().toISOString() }).eq('user_id', c.user_id).eq('notif_ativas', true).eq(`lembrete_${t}`, true).eq(`lembrete_${t}_horario`, c[`lembrete_${t}_horario`]);
+            const patch: Database['public']['Tables']['configuracoes']['Update'] = {};
+            patch[field] = new Date().toISOString();
+            let claim = supabaseAdmin.from('configuracoes').update(patch).eq('user_id', c.user_id).eq('notif_ativas', true).eq(`lembrete_${t}`, true).eq(`lembrete_${t}_horario`, c[`lembrete_${t}_horario`]);
             const previous = c[field];
             claim = previous ? claim.eq(field, previous) : claim.is(field, null);
             const { data: claimed, error: claimError } = await claim.select('user_id');
