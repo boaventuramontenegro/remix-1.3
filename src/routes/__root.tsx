@@ -17,7 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { registerServiceWorker } from "@/lib/pwa";
 import { LoadingScreen } from "@/components/Logo";
 import { themeInitScript, useTemaResolvido } from "@/lib/theme";
-import { lockThemeColorInitScript } from "@/lib/pinThemes";
+import { lockThemeColorInitScript, restoreAppBars, setLockGlobals } from "@/lib/pinThemes";
 
 function NotFoundComponent() {
   return (
@@ -125,6 +125,7 @@ function RootComponent() {
     registerServiceWorker();
     const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      if (event === "SIGNED_OUT") { setLockGlobals(false, 'classico'); restoreAppBars(); }
       router.invalidate();
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });

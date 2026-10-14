@@ -3,14 +3,14 @@ import { Fingerprint } from 'lucide-react';
 import { Logo } from './Logo';
 import { BolinhasPin, TecladoPin } from './PinPad';
 import { Button } from './ui/button';
-import { getPinTheme, setThemeColor, BRAND_BAR_COLOR } from '@/lib/pinThemes';
+import { getPinTheme, applyLockBars, restoreAppBars } from '@/lib/pinThemes';
 
 /** Estados: 'bio' (só logo, painel do sistema aberto), 'bio-falhou' (ícone pequeno embaixo), 'pin' (bolinhas + teclado). */
 export function LockScreen({ themeId, tamanho = 4, pin, onPinChange, onComplete, showPin, showBio, bioFailed, onBio, busy, tremor, message, preview, children }: {
   themeId: string; tamanho?: number; pin: string; onPinChange: (v: string) => void; onComplete?: (v: string) => void;
   showPin: boolean; showBio: boolean; bioFailed?: boolean; onBio?: () => void; busy?: boolean; tremor?: boolean; message?: string; preview?: boolean; children?: ReactNode;
 }) {
-  const theme = getPinTheme(themeId)!;
+  const theme = getPinTheme(themeId);
   const [loadedImage, setLoadedImage] = useState<string>();
   useEffect(() => {
     if (!theme?.fundo) return;
@@ -22,9 +22,15 @@ export function LockScreen({ themeId, tamanho = 4, pin, onPinChange, onComplete,
   }, [theme?.fundo]);
   useEffect(() => {
     if (preview) return;
-    setThemeColor(theme.statusBarColor);
-    return () => setThemeColor(BRAND_BAR_COLOR);
-  }, [theme.statusBarColor, preview]);
+    applyLockBars(themeId);
+    // Router head updates must not restore the green color while locked.
+    const observer = new MutationObserver(() => {
+      const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+      if (Array.from(metas).some(m => m.content !== theme.statusBarColor)) applyLockBars(themeId);
+    });
+    observer.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['content'] });
+    return () => { observer.disconnect(); restoreAppBars(); };
+  }, [themeId, theme.statusBarColor, preview]);
   const vars = { '--pin-overlay': theme?.escurecimento ?? 0, ...(theme?.fundo && loadedImage === theme.fundo ? { '--pin-wallpaper': `url("${theme.fundo}")` } : {}) } as CSSProperties;
   return <div className="lock-screen" data-pin-theme={theme?.token} style={vars}>
     <div className="lock-content">
