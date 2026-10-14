@@ -1,13 +1,13 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Bell, ChevronRight, Database, Download, Lock, Palette, SlidersHorizontal, Smartphone } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, Database, Lock, Palette, SlidersHorizontal } from "lucide-react";
 import { accountQuery, usePreferences, useSavePreferences, type Config } from "@/lib/preferences";
 import { applyTheme } from "@/lib/theme";
 import { FORMAS_PAGAMENTO } from "@/lib/format";
 import { pageMeta } from "@/lib/page-meta";
-import { useInstallPrompt } from "@/lib/pwa";
+import { pushReportMessage } from "@/lib/push-result";
 import { assinarPush, cancelarPush, isIOS, isStandalone, statusPush } from "@/lib/push-client";
 import { enviarTeste } from "@/lib/push.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,7 +19,7 @@ import { ConfirmSheet } from "@/components/ConfirmSheet";
 import { DeviceSecuritySettings } from "@/components/DeviceSecuritySettings";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
-  head: () => pageMeta("Configurações", "Tema, instalação, preferências, dados, notificações e segurança."),
+  head: () => pageMeta("Configurações", "Tema, preferências, segurança do aparelho, notificações e dados."),
   component: Configuracoes,
 });
 
@@ -28,16 +28,14 @@ const Row = ({ label, desc, children }: { label: string; desc?: string; children
 );
 
 /** Card memoizado: só re-renderiza quando seu conteúdo ou o indicador "Salvo ✓" muda. */
-const Card = memo(function Card({ icon: I, title, salvo, children }: { icon: typeof Bell; title: string; salvo?: boolean; children: ReactNode }) {
-  return (
-    <section className="surface divide-y rounded-3xl">
-      <h2 className="flex items-center gap-2 pb-3 font-semibold">
-        <I size={18} className="text-primary" />{title}
-        {salvo && <span className="ml-auto text-xs font-medium text-primary">Salvo ✓</span>}
-      </h2>
-      {children}
-    </section>
-  );
+export const Card = memo(function Card({ icon: I, title, salvo, children, collapsible = false }: { icon: typeof Bell; title: string; salvo?: boolean; children: ReactNode; collapsible?: boolean }) {
+  const [open, setOpen] = useState(!collapsible);
+  const id = `card-${title.toLowerCase().replaceAll(' ', '-')}`;
+  const label = <><I size={18} className="shrink-0 text-primary" />{title}{salvo && <span className="ml-auto text-xs font-medium text-primary">Salvo ✓</span>}</>;
+  return <section className="surface rounded-3xl">
+    <h2 className="font-semibold">{collapsible ? <Button variant="ghost" className="h-auto w-full justify-start gap-2 px-0 py-0 text-left text-base font-semibold hover:bg-transparent" aria-expanded={open} aria-controls={id} onClick={() => setOpen(v => !v)}>{label}<ChevronDown size={18} className={`ml-auto shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} /></Button> : <span className="flex items-center gap-2">{label}</span>}</h2>
+    <div id={id} hidden={!open} className="mt-3 divide-y border-t">{children}</div>
+  </section>;
 });
 
 function Seg<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
@@ -52,8 +50,6 @@ function Configuracoes() {
   const save = useSavePreferences();
   const { data: user } = useQuery(accountQuery);
   const qc = useQueryClient();
-  const navigate = useNavigate();
-  const { canInstall, install } = useInstallPrompt();
   const [instalado, setInstalado] = useState(false);
   const [ios, setIos] = useState(false);
   const [perm, setPerm] = useState<string>("default");
@@ -92,23 +88,41 @@ function Configuracoes() {
     setInstalado(isStandalone());
     setIos(isIOS());
     if ("Notification" in window) setPerm(Notification.permission);
-    void statusPush().then(setPushStatus).catch(() => {});
+    const refresh = () => { if (!document.hidden) { if ('Notification' in window) setPerm(Notification.permission); void statusPush().then(setPushStatus).catch(() => setPushStatus({ ok: false, texto: 'Não foi possível consultar a inscrição. Tente novamente.' })); } };
+    refresh(); document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
   }, []);
   const [pushStatus, setPushStatus] = useState<{ ok: boolean; texto: string } | null>(null);
-  const instalar = async () => { if (await install()) { setInstalado(true); toast.success("App instalado"); } };
+  const [pushBusy, setPushBusy] = useState(false);
 
   const toggleNotif = async (on: boolean) => {
-    if (on) {
-      if (!("Notification" in window)) { toast.error(ios ? "No iPhone, instale o app na Tela de Início para receber notificações." : "Seu navegador não suporta notificações."); return; }
-      const p = await Notification.requestPermission(); setPerm(p);
-      if (p !== "granted") { toast.error("Permissão negada. Libere nas configurações do navegador."); return; }
-      try { if (!(await assinarPush())) toast.message("As notificações funcionam no app publicado/instalado."); } catch { toast.error("Não foi possível ativar as notificações."); return; }
-      set({ notif_ativas: true, fuso_horario: Intl.DateTimeFormat().resolvedOptions().timeZone });
-      setPushStatus(await statusPush().catch(() => null));
-    } else { await cancelarPush().catch(() => {}); set({ notif_ativas: false }); setPushStatus(await statusPush().catch(() => null)); }
+    if (pushBusy) return;
+    setPushBusy(true);
+    try {
+      if (on) {
+        if (!("Notification" in window)) throw Error(ios ? "No iPhone, instale o app na Tela de Início para receber notificações." : "Seu navegador não suporta notificações.");
+        const p = await Notification.requestPermission(); setPerm(p);
+        if (p !== 'granted') throw Error('Permissão negada. Libere nas configurações do navegador.');
+        await assinarPush();
+        await save.mutateAsync({ notif_ativas: true, fuso_horario: Intl.DateTimeFormat().resolvedOptions().timeZone });
+      } else {
+        await cancelarPush(); await save.mutateAsync({ notif_ativas: false });
+      }
+      setPushStatus(await statusPush());
+    } catch (error) {
+      const texto = error instanceof Error ? error.message : 'Não foi possível alterar as notificações. Tente novamente.';
+      setPushStatus({ ok: false, texto }); toast.error(texto);
+    } finally { setPushBusy(false); }
   };
   const teste = async () => {
-    try { const r = await enviarTeste(); r.enviados ? toast.success("Notificação enviada") : toast.error("Nenhum aparelho inscrito. Ative as notificações no app publicado/instalado."); } catch { toast.error("Não foi possível enviar."); }
+    if (pushBusy || !pushStatus?.ok) return;
+    setPushBusy(true);
+    try {
+      const r = await enviarTeste();
+      if (r.enviados) toast.success(pushReportMessage(r)); else toast.error(pushReportMessage(r));
+      setPushStatus(await statusPush());
+    } catch { toast.error('Não foi possível enviar a notificação. Tente novamente.'); }
+    finally { setPushBusy(false); }
   };
   const apagarGastos = async () => {
     if (!user) return;
@@ -125,14 +139,7 @@ function Configuracoes() {
       <Card icon={Palette} title="Aparência" salvo={salvo}>
         <div className="py-3"><Seg value={config.tema} options={[["light", "Claro"], ["dark", "Escuro"], ["auto", "Automático"]]} onChange={(v) => { applyTheme(v); set({ tema: v }); }} /></div>
       </Card>
-      <Card icon={Smartphone} title="Aplicativo">
-        <div className="space-y-2 py-3">
-          <Button className="w-full rounded-xl" disabled={instalado || (!canInstall && !ios)} onClick={instalar}><Download />{instalado ? "App instalado" : "Instalar app"}</Button>
-          {!instalado && ios && <p className="text-xs text-muted-foreground">No iPhone: toque em <strong>Compartilhar</strong> no Safari e depois em <strong>Adicionar à Tela de Início</strong>.</p>}
-          {!instalado && !ios && !canInstall && <p className="text-xs text-muted-foreground">Abra o app publicado no Chrome para instalar com um toque.</p>}
-        </div>
-      </Card>
-      <Card icon={SlidersHorizontal} title="Preferências" salvo={salvo}>
+      <Card icon={SlidersHorizontal} title="Preferências" salvo={salvo} collapsible>
         <Row label="Semana começa"><Seg value={config.semana_inicia} options={[[1, "Segunda"], [0, "Domingo"]]} onChange={(v) => set({ semana_inicia: v })} /></Row>
         <button type="button" onClick={() => setSheetDia(true)} className="flex w-full items-center justify-between gap-3 py-3 text-left">
           <div><p className="text-sm font-medium">Mês começa no dia</p><p className="text-xs text-muted-foreground">Seu mês financeiro</p></div>
@@ -142,26 +149,27 @@ function Configuracoes() {
           <button key={f.value} type="button" onClick={() => set({ pagamento_padrao: f.value })} className={chip(config.pagamento_padrao === f.value)}>{f.label}</button>
         ))}</div></div>
       </Card>
-      <Card icon={Database} title="Dados">
-        <div className="py-3">
-          <Button variant="outline" className="w-full rounded-xl text-destructive" onClick={() => setConfirmApagar(true)}>Apagar todos os gastos</Button>
-        </div>
+      <Card icon={Lock} title="Segurança do aparelho" salvo={salvo} collapsible>
+        {user && <DeviceSecuritySettings userId={user.id} themeId={config.pin_tema} timeout={config.pin_tempo_bloqueio} onTimeout={v => set({ pin_tempo_bloqueio: v })} onTheme={v => set({ pin_tema: v })} />}
       </Card>
-      <Card icon={Bell} title="Notificações" salvo={salvo}>
-        <Row label="Ativar notificações"><Switch checked={config.notif_ativas} onCheckedChange={toggleNotif} /></Row>
+      <Card icon={Bell} title="Notificações" salvo={salvo} collapsible>
+        <Row label="Ativar notificações"><Switch aria-label="Ativar notificações" disabled={pushBusy} checked={config.notif_ativas && !!pushStatus?.ok} onCheckedChange={toggleNotif} /></Row>
         {pushStatus && <p className={`py-1 text-xs ${pushStatus.ok ? "text-primary" : "text-muted-foreground"}`}>{pushStatus.texto}</p>}
         {perm === "denied" && <p className="py-2 text-xs text-destructive">As notificações estão bloqueadas. Toque no cadeado ao lado do endereço (ou nas configurações do app) e permita notificações.</p>}
         {ios && !instalado && <p className="py-2 text-xs text-muted-foreground">No iPhone, as notificações só funcionam com o app instalado na Tela de Início.</p>}
         {(['manha','tarde','noite'] as const).map(turno=><Row key={turno} label={turno==='manha'?'Manhã':turno==='tarde'?'Tarde':'Noite'}><div className="flex items-center gap-2"><Button variant="ghost" onClick={()=>{const [h,m]=config[`lembrete_${turno}_horario`].split(':');setHora(h ?? '09');setMinuto(m ?? '00');setHorarioSheet(turno);}}>{config[`lembrete_${turno}_horario`].slice(0,5)}<ChevronRight size={16}/></Button><Switch aria-label={`Lembrete ${turno}`} checked={config[`lembrete_${turno}`]} onCheckedChange={v=>set({[`lembrete_${turno}`]:v})}/></div></Row>)}
         {config.notif_ativas && <Row label="Aviso de 80% do orçamento"><Switch checked={config.notif_limite_80} onCheckedChange={(v) => set({ notif_limite_80: v })} /></Row>}
-        {config.notif_ativas && <div className="py-3"><Button variant="outline" className="w-full rounded-xl" onClick={teste}>Enviar notificação de teste</Button></div>}
+        {config.notif_ativas && <div className="py-3"><Button variant="outline" className="w-full rounded-xl" disabled={pushBusy || !pushStatus?.ok} onClick={teste}>Enviar notificação de teste</Button></div>}
       </Card>
-      <Card icon={Lock} title="Segurança neste aparelho" salvo={salvo}>
-        {user && <DeviceSecuritySettings userId={user.id} themeId={config.pin_tema} timeout={config.pin_tempo_bloqueio} onTimeout={v => set({ pin_tempo_bloqueio: v })} onTheme={v => set({ pin_tema: v })} />}
+      <Card icon={Database} title="Dados">
+        <div className="py-3">
+          <Button variant="outline" className="w-full rounded-xl text-destructive" onClick={() => setConfirmApagar(true)}>Apagar todos os gastos</Button>
+        </div>
       </Card>
 
+
       <BottomSheet open={!!horarioSheet} onOpenChange={o=>!o&&setHorarioSheet(null)} title="Horário do lembrete">
-        <div className="grid grid-cols-2 gap-4"><div><p className="mb-2 text-sm font-medium">Hora</p><div className="grid max-h-60 grid-cols-3 gap-1 overflow-y-auto">{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(h=><Button key={h} variant={hora===h?'default':'outline'} onClick={()=>setHora(h)}>{h}</Button>)}</div></div><div><p className="mb-2 text-sm font-medium">Minuto</p><div className="grid max-h-60 grid-cols-3 gap-1 overflow-y-auto">{["00","15","30","45"].map(m=><Button key={m} variant={minuto===m?'default':'outline'} onClick={()=>setMinuto(m)}>{m}</Button>)}</div></div></div>
+        <div className="grid grid-cols-2 gap-4"><div><p className="mb-2 text-sm font-medium">Hora</p><div className="grid max-h-60 grid-cols-3 gap-1 overflow-y-auto">{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(h=><Button key={h} variant={hora===h?'default':'outline'} onClick={()=>setHora(h)}>{h}</Button>)}</div></div><div><p className="mb-2 text-sm font-medium">Minuto</p><div className="grid max-h-60 grid-cols-3 gap-1 overflow-y-auto">{Array.from({length:60},(_,i)=>String(i).padStart(2,'0')).map(m=><Button key={m} variant={minuto===m?'default':'outline'} onClick={()=>setMinuto(m)}>{m}</Button>)}</div></div></div>
         <Button className="mt-4 h-12 w-full" onClick={()=>{if(horarioSheet)set({[`lembrete_${horarioSheet}_horario`]:`${hora}:${minuto}`, fuso_horario:Intl.DateTimeFormat().resolvedOptions().timeZone});setHorarioSheet(null);}}>Salvar horário</Button>
       </BottomSheet>
       <BottomSheet open={sheetDia} onOpenChange={setSheetDia} title="Mês começa no dia" description="Escolha o dia em que seu mês financeiro começa.">
