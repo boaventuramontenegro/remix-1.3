@@ -1,21 +1,11 @@
 # Current priority corrections
-- [ ] Three-minute authenticated unlock session and biometric-to-PIN fallback
-- [ ] Lock-only system theme colors and restoration
-- [ ] Real push registration, persisted status, delivery errors and reminder deduplication
-- [ ] Settings card order and inline collapse preserving controls
-- [ ] Automated tests and signed-in browser checks; report physical-device limitations
+- [x] Three-minute device unlock session and biometric-to-PIN fallback; exact boundary and real PIN/reload checks
+- [x] Lock-only system theme colors and restoration; three styles tested in document, Android rendering not claimed
+- [x] Push persistence/read-back, truthful status and safe delivery diagnostics; contract tests passed
+- [x] Atomic daily reminder claims; existing managed 15-minute schedule confirmed active
+- [x] Settings card order and inline collapse preserving controls; authenticated small/large-screen checks
+- [x] 34 automated tests passed and current build OK; limitations reported
+- [ ] Publish changes and validate Android biometric, bars and actual push subscription/delivery — blocked on published update and physical device; backend currently has zero subscriptions
+- [ ] Observe an authenticated scheduled reminder delivery with app closed — blocked on a real registered device; schedule metadata is active but successful delivery is not yet evidenced
 
-# Earlier requested Meu Bolso adjustments (not expanded in this task)
-- [ ] A: Independent device security, biometric-first lock, 4–8 digit PIN and delayed recovery
-- [ ] B: Three lock themes, optimized wallpaper, full-screen previews and saved theme
-- [ ] C: Diagnose VAPID/subscription failures, repair registration and report device status
-- [ ] Reports-only export sheet with date/category filters and five formats
-- [ ] Calendar-year chart and aligned sticky annual table
-- [ ] Shared chart appearance, tooltip privacy and daily-average utility with tests
-- [ ] Current-week selectors and inline global eye controls
-- [ ] Profile name metadata, backfill and fallback
-- [ ] Expense/category confirmation sheets and category reassignment/deletion
-- [ ] Restore missing default categories and history-based suggestions
-- [ ] Dismissible budget alerts
-- [ ] Three independently scheduled timezone-aware push reminders
-- [ ] Verify signed-in workflows, screenshots and tests
+Financial features and unrelated earlier requests were preserved, not expanded in this task.
