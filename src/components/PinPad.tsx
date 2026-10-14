@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Delete } from "lucide-react";
+import { Delete, Fingerprint } from "lucide-react";
 import { BottomSheet } from "./BottomSheet";
 import { Button } from "./ui/button";
 
 const TECLAS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"] as const;
 
-export function TecladoPin({ valor, onChange, disabled, onDigits, dark, tamanho = 4, themed }: {
+export function TecladoPin({ valor, onChange, disabled, onDigits, dark, tamanho = 4, themed, bioKey }: {
   valor: string;
   onChange: (v: string) => void;
   disabled?: boolean;
@@ -13,10 +13,15 @@ export function TecladoPin({ valor, onChange, disabled, onDigits, dark, tamanho 
   dark?: boolean;
   tamanho?: number;
   themed?: boolean;
+  /** Quando definido, a posição vazia à esquerda do 0 vira a tecla da digital. */
+  bioKey?: () => void;
 }) {
+  const keyClass = `h-16 rounded-2xl text-2xl ${themed ? "pin-key" : ""} ${dark ? "border border-brand-white/20 text-brand-white hover:bg-brand-white/20 hover:text-brand-white" : "border border-border"}`;
   return (
     <div className="grid w-full grid-cols-3 gap-3">
-      {TECLAS.map((n, i) => n === "" ? <span key={i} /> : (
+      {TECLAS.map((n, i) => n === "" ? (bioKey
+        ? <Button key={i} type="button" variant="ghost" disabled={disabled} aria-label="Usar impressão digital" className={keyClass} onClick={bioKey}><Fingerprint className="size-7" /></Button>
+        : <span key={i} />) : (
         <Button
           key={n}
           type="button"
