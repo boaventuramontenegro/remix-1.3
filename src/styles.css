@@ -215,9 +215,11 @@
   --pin-key-height: 76px;
   --pin-dot-size: 10px;
 }
-.lock-screen { position: fixed; inset: 0; z-index: 80; overflow-y: auto; background-image: var(--pin-wallpaper, var(--pin-fallback)); background-size: cover; background-position: center; color: var(--pin-text); isolation: isolate; }
+.lock-screen { position: fixed; inset: 0; height: 100dvh; min-height: 100lvh; z-index: 80; overflow-y: auto; background-image: var(--pin-wallpaper, var(--pin-fallback)); background-size: cover; background-position: center; color: var(--pin-text); isolation: isolate; }
 .lock-screen::before { content: ''; position: fixed; inset: 0; z-index: -1; background: var(--pin-black); opacity: var(--pin-overlay, 0); pointer-events: none; }
-.lock-content { width: min(100%, 420px); min-height: 100dvh; margin: 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: max(28px, env(safe-area-inset-top)) 24px max(28px, env(safe-area-inset-bottom)); }
+.lock-content { width: min(100%, 420px); min-height: 100%; margin: 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 26px; padding: calc(env(safe-area-inset-top) + 12vh) 24px calc(env(safe-area-inset-bottom) + 28px); }
+.lock-body { flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+.lock-bio-key { width: 64px; height: 64px; }
 .lock-logo { color: var(--pin-text); text-shadow: var(--pin-text-shadow); white-space: nowrap; }
 .lock-title { font-size: 20px; font-weight: 600; color: var(--pin-text); text-shadow: var(--pin-text-shadow); text-align: center; }
 .lock-hint { font-size: 13px; line-height: 1.5; color: var(--pin-text); opacity: .9; }

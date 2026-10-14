@@ -30,3 +30,15 @@ export async function cancelarPush() {
   const sub = await reg?.pushManager.getSubscription();
   if (sub) { await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); }
 }
+
+/** Situação deste aparelho, em texto para o usuário. */
+export async function statusPush(): Promise<{ ok: boolean; texto: string }> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) return { ok: false, texto: isIOS() && !isStandalone() ? "Instale o app na Tela de Início para receber notificações." : "Este navegador não suporta notificações." };
+  if (Notification.permission === "denied") return { ok: false, texto: "Notificações bloqueadas nas configurações do navegador." };
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) return { ok: false, texto: "Disponível só no app publicado (a prévia não recebe notificações)." };
+  const sub = await reg.pushManager.getSubscription();
+  if (!sub) return { ok: false, texto: "Este aparelho ainda não está inscrito." };
+  const { data } = await supabase.from("push_subscriptions").select("id").eq("endpoint", sub.endpoint).maybeSingle();
+  return data ? { ok: true, texto: "Este aparelho: inscrito ✓" } : { ok: false, texto: "Inscrição não foi salva. Desative e ative de novo." };
+}
