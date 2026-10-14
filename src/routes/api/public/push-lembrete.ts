@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/public/push-lembrete")({
             let r: ReturnType<typeof deveLembrar>;
             try { r = deveLembrar(String(c[`lembrete_${t}_horario`]).slice(0, 5), fuso, ultimo); } catch { continue; }
             if (!r.enviar) continue;
-            await supabaseAdmin.from("configuracoes").update({ [`lembrete_${t}_proximo`]: new Date().toISOString() }).eq("user_id", c.user_id);
+            await supabaseAdmin.from("configuracoes").update({ [`lembrete_${t}_proximo`]: new Date().toISOString() } as never).eq("user_id", c.user_id);
             enviados += await enviarParaUsuario(supabaseAdmin, c.user_id, { title: "Meu Bolso", body: "Já registrou seus gastos de hoje?", url: "/inicio", tag: `lembrete-${t}` });
           }
         }

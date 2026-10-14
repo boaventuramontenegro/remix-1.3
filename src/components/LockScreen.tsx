@@ -10,7 +10,7 @@ export function LockScreen({ themeId, tamanho = 4, pin, onPinChange, onComplete,
   themeId: string; tamanho?: number; pin: string; onPinChange: (v: string) => void; onComplete?: (v: string) => void;
   showPin: boolean; showBio: boolean; bioFailed?: boolean; onBio?: () => void; busy?: boolean; tremor?: boolean; message?: string; preview?: boolean; children?: ReactNode;
 }) {
-  const theme = getPinTheme(themeId);
+  const theme = getPinTheme(themeId)!;
   const [loadedImage, setLoadedImage] = useState<string>();
   useEffect(() => {
     if (!theme?.fundo) return;
@@ -32,9 +32,9 @@ export function LockScreen({ themeId, tamanho = 4, pin, onPinChange, onComplete,
       <div className="lock-body">
         {showPin && <div className="lock-pin motion-safe:animate-in motion-safe:slide-in-from-bottom-8 motion-safe:duration-300">
           <p className="lock-hint text-center min-h-5" aria-live="polite">{message}</p>
-          <BolinhasPin quantas={pin.length} tamanho={tamanho} dark tremor={tremor} themed />
+          <BolinhasPin quantas={pin.length} tamanho={tamanho} dark tremor={!!tremor} themed />
           <div className={busy ? 'w-full opacity-50 transition-opacity' : 'w-full transition-opacity'}>
-            <TecladoPin valor={pin} onChange={onPinChange} onDigits={onComplete} tamanho={tamanho} disabled={busy} dark themed bioKey={showBio ? onBio : undefined} />
+            <TecladoPin valor={pin} onChange={onPinChange} {...(onComplete ? { onDigits: onComplete } : {})} tamanho={tamanho} disabled={!!busy} dark themed {...(showBio && onBio ? { bioKey: onBio } : {})} />
           </div>
         </div>}
         {!showPin && showBio && bioFailed && <div className="flex flex-col items-center gap-3">
