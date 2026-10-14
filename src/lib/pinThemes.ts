@@ -18,7 +18,7 @@ export const LOCK_GLOBAL_THEME = 'meubolso-lock-estilo';
 export const LOCK_GLOBAL_ACTIVE = 'meubolso-lock-ativo';
 export function readPinTheme(userId: string, fallback = 'classico') { return getPinTheme(localStorage.getItem(themeKey(userId)) ?? fallback)?.id ?? 'classico'; }
 export function savePinTheme(userId: string, id: string) { const v = getPinTheme(id)?.id ?? 'classico'; localStorage.setItem(themeKey(userId), v); localStorage.setItem(LOCK_GLOBAL_THEME, v); window.dispatchEvent(new Event('meubolso-pin-tema')); }
-export function setLockGlobals(active: boolean, themeId: string) { try { localStorage.setItem(LOCK_GLOBAL_ACTIVE, active ? '1' : '0'); localStorage.setItem(LOCK_GLOBAL_THEME, themeId); } catch { /* ignore */ } }
+export function setLockGlobals(active: boolean, themeId: string) { try { localStorage.setItem(LOCK_GLOBAL_ACTIVE, active ? '1' : '0'); localStorage.setItem(LOCK_GLOBAL_THEME, themeId); } catch { /* ignore */ } if (!active && typeof document !== 'undefined') restoreAppBars(); }
 export function setThemeColor(color: string) {
   const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
   if (!metas.length) { const m = document.createElement('meta'); m.name = 'theme-color'; m.content = color; document.head.appendChild(m); }
