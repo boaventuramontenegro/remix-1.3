@@ -18,4 +18,23 @@ export function limparSeguranca(userId: string) { localStorage.removeItem(pinKey
 export function emIframe() { try { return window.self !== window.top; } catch { return true; } }
 export function bioContextUnavailable() { return emIframe() || location.hostname.startsWith('id-preview--') || location.hostname.startsWith('preview--') || location.hostname.includes('lovableproject') || location.hostname === 'localhost'; }
 export async function biometriaDisponivel() { try { if (bioContextUnavailable() || typeof PublicKeyCredential === 'undefined') return false; return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; } }
-export async function biometricUnlock(userId: string) { const r = readPin(userId); if (!r?.credential) throw Error('Digital não autorizada.'); if ((r.retryAt ?? 0) > Date.now()) throw Error('Aguarde 30 segundos.'); const { startAuthentication } = await import('@simplewebauthn/browser'); const result = await startAuthentication({ optionsJSON: { challenge: randomChallenge(), rpId: location.hostname, allowCredentials: [{ id: r.credential, type: 'public-key', transports: ['internal'] }], userVerification: 'required' } }); if (result.id !== r.credential) throw Error('Credencial incorreta.'); }
+export async function biometricUnlock(userId: string, signal?: AbortSignal) {
+  const r = readPin(userId);
+  if (!r?.credential) throw Error('Digital não autorizada.');
+  if ((r.retryAt ?? 0) > Date.now()) throw Error('Aguarde 30 segundos.');
+  const { startAuthentication, WebAuthnAbortService } = await import('@simplewebauthn/browser');
+  if (signal?.aborted) throw Error('Verificação cancelada.');
+  const cancel = () => WebAuthnAbortService.cancelCeremony();
+  signal?.addEventListener('abort', cancel, { once: true });
+  const challenge = randomChallenge();
+  try {
+    const result = await startAuthentication({ optionsJSON: { challenge, timeout: 20000, rpId: location.hostname, allowCredentials: [{ id: r.credential, type: 'public-key', transports: ['internal'] }], userVerification: 'required' } });
+    if (signal?.aborted || result.id !== r.credential) throw Error('Credencial incorreta.');
+    const decode = (value: string) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    const client = JSON.parse(new TextDecoder().decode(decode(result.response.clientDataJSON)));
+    const authenticator = decode(result.response.authenticatorData);
+    const rpHash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(location.hostname)));
+    if (client.type !== 'webauthn.get' || client.challenge !== challenge || client.origin !== location.origin ||
+      authenticator.length < 37 || (authenticator[32] & 5) !== 5 || !rpHash.every((b, i) => authenticator[i] === b)) throw Error('Verificação biométrica inválida.');
+  } finally { signal?.removeEventListener('abort', cancel); }
+}
