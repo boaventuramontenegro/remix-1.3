@@ -35,6 +35,6 @@ export async function biometricUnlock(userId: string, signal?: AbortSignal) {
     const authenticator = decode(result.response.authenticatorData);
     const rpHash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(location.hostname)));
     if (client.type !== 'webauthn.get' || client.challenge !== challenge || client.origin !== location.origin ||
-      authenticator.length < 37 || (authenticator[32] & 5) !== 5 || !rpHash.every((b, i) => authenticator[i] === b)) throw Error('Verificação biométrica inválida.');
+      authenticator.length < 37 || ((authenticator[32] ?? 0) & 5) !== 5 || !rpHash.every((b, i) => authenticator[i] === b)) throw Error('Verificação biométrica inválida.');
   } finally { signal?.removeEventListener('abort', cancel); }
 }

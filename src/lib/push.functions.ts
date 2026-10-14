@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { enviarParaUsuario } from "./push.server";
+import { enviarParaUsuario, enviarRelatorioPush } from "./push.server";
 import { inicioMesFinanceiro } from "./budget";
 
 export const obterChavePublica = createServerFn({ method: "GET" }).handler(async () => {
@@ -12,13 +12,12 @@ export const obterChavePublica = createServerFn({ method: "GET" }).handler(async
 export const enviarTeste = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const n = await enviarParaUsuario(context.supabase, context.userId, {
+    return await enviarRelatorioPush(context.supabase, context.userId, {
       title: "Meu Bolso",
-      body: "Notificação de teste: está tudo funcionando! 🎉",
+      body: "Notificação de teste do Meu Bolso",
       url: "/inicio",
       tag: "teste",
     });
-    return { enviados: n };
   });
 
 /** Depois de salvar um gasto: se a categoria cruzou 80% do orçamento do mês, avisa (1x por categoria/mês). */
