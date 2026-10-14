@@ -27,6 +27,8 @@ export function SecurityGate({ children }: { children: ReactNode }) {
   const lockEpoch = useRef(0);
   const lockedRef = useRef(false);
   const bioController = useRef<AbortController | null>(null);
+  const automaticEpoch = useRef(-1);
+  const automaticBio = useRef<() => void>(() => {});
   const [lockVersion, setLockVersion] = useState(0);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -54,7 +56,8 @@ export function SecurityGate({ children }: { children: ReactNode }) {
       setTheme(th); setLockGlobals(on, th); setLockVersion(v => v + 1);
     };
     const resume = () => {
-      if (document.hidden || busyRef.current || lockedRef.current) return;
+      if (document.hidden || busyRef.current) return;
+      if (lockedRef.current) { automaticBio.current(); return; }
       const r = readPin(user.id);
       if ((r?.hash || (r?.credential && r.biometricEnabled !== false)) && !hasUnlockSession(user.id)) lock();
     };
@@ -139,10 +142,12 @@ export function SecurityGate({ children }: { children: ReactNode }) {
     }
   };
 
-  useEffect(() => {
-    if (!locked || !hasBio) return;
+  automaticBio.current = () => {
+    if (!locked || !hasBio || document.hidden || busyRef.current || automaticEpoch.current === lockEpoch.current) return;
+    automaticEpoch.current = lockEpoch.current;
     void tryBio();
-  }, [locked, user?.id, lockVersion]);
+  };
+  useEffect(() => { automaticBio.current(); }, [locked, user?.id, lockVersion]);
 
   const unlock = async (next: string) => {
     if (!user || busyRef.current || (readPin(user.id)?.retryAt ?? 0) > Date.now()) return;

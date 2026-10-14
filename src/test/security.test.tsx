@@ -49,6 +49,14 @@ describe('Biometric fallback', () => {
     expect(state.bio).toHaveBeenCalledTimes(1); expect(screen.queryByText('Financeiro privado')).not.toBeInTheDocument();
     await act(async () => resolve?.()); await screen.findByText('Financeiro privado');
   });
+  it('starts once when a hidden initial tab first becomes visible', async () => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    gate(); expect(state.bio).not.toHaveBeenCalled();
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    fireEvent(document, new Event('visibilitychange'));
+    await screen.findByText('PIN'); expect(state.bio).toHaveBeenCalledTimes(1);
+    fireEvent(document, new Event('visibilitychange')); expect(state.bio).toHaveBeenCalledTimes(1);
+  });
   it('keeps PIN available after an incorrect entry', async () => {
     state.check.mockResolvedValue(false); gate(); fireEvent.click(await screen.findByText('PIN'));
     await screen.findByText('PIN incorreto.'); expect(screen.queryByText('Financeiro privado')).not.toBeInTheDocument();

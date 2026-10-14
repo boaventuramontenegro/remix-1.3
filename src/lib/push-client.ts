@@ -20,6 +20,7 @@ async function appRegistration() {
   } finally { clearTimeout(timer); }
 }
 export async function assinarPush(): Promise<boolean> {
+  if (!("Notification" in window)) throw Error('Este navegador não suporta notificações.');
   if (Notification.permission !== 'granted') throw Error('Autorize as notificações nas configurações do navegador.');
   const reg = await appRegistration();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
