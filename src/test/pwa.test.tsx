@@ -24,4 +24,11 @@ describe('PWA lifecycle contracts', () => {
     worker.state = 'redundant'; worker.dispatchEvent(new Event('statechange'));
     await expect(result).rejects.toThrow('WorkerInstallFailed');
   });
+  it('can retry after installation failure and returns a real activated registration', async () => {
+    vi.stubEnv('PROD', true);
+    const reg = Object.assign(new EventTarget(), { active: { state: 'activated', scriptURL: `${location.origin}/sw.js` }, scope: `${location.origin}/` });
+    const register = vi.fn().mockResolvedValue(reg);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { register } });
+    expect(await registerServiceWorker()).toBe(reg);
+  });
 });
