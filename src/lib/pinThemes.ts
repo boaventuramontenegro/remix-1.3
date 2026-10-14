@@ -11,19 +11,30 @@ export const pinThemes: PinTheme[] = [
   { id: 'galaxia', nome: 'Galáxia', tipo: 'wallpaper', token: 'galaxia', fundo: '/pin/galaxia.webp', miniatura: '/pin/galaxia-thumb.webp', escurecimento: 0.3, statusBarColor: '#230d30', navBarColor: '#0d0b1d' },
   { id: 'por-do-sol', nome: 'Pôr do Sol', tipo: 'neutro', token: 'por-do-sol', escurecimento: 0, statusBarColor: '#FB923C', navBarColor: '#7C3AED' },
 ];
-export const getPinTheme = (id?: string | null) => pinThemes.find(t => t.id === id) ?? pinThemes[0];
+export const getPinTheme = (id?: string | null): PinTheme => pinThemes.find(t => t.id === id) ?? { id: 'classico', nome: 'Clássico', tipo: 'padrao', token: 'classico', escurecimento: 0, statusBarColor: BRAND_BAR_COLOR, navBarColor: BRAND_BAR_COLOR };
 export const themeKey = (userId: string) => `meubolso-pin-tema-${userId}`;
 /** Chaves globais não sensíveis lidas pelo script inline antes do React (só estilo e se o bloqueio está ativo). */
 export const LOCK_GLOBAL_THEME = 'meubolso-lock-estilo';
 export const LOCK_GLOBAL_ACTIVE = 'meubolso-lock-ativo';
 export function readPinTheme(userId: string, fallback = 'classico') { return getPinTheme(localStorage.getItem(themeKey(userId)) ?? fallback)?.id ?? 'classico'; }
 export function savePinTheme(userId: string, id: string) { const v = getPinTheme(id)?.id ?? 'classico'; localStorage.setItem(themeKey(userId), v); localStorage.setItem(LOCK_GLOBAL_THEME, v); window.dispatchEvent(new Event('meubolso-pin-tema')); }
-export function setLockGlobals(active: boolean, themeId: string) { try { localStorage.setItem(LOCK_GLOBAL_ACTIVE, active ? '1' : '0'); localStorage.setItem(LOCK_GLOBAL_THEME, themeId); } catch { /* ignore */ } }
+export function setLockGlobals(active: boolean, themeId: string) { try { localStorage.setItem(LOCK_GLOBAL_ACTIVE, active ? '1' : '0'); localStorage.setItem(LOCK_GLOBAL_THEME, themeId); } catch { /* ignore */ } if (!active && typeof document !== 'undefined') restoreAppBars(); }
 export function setThemeColor(color: string) {
-  let m = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); }
-  m.content = color;
+  const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!metas.length) { const m = document.createElement('meta'); m.name = 'theme-color'; m.content = color; document.head.appendChild(m); }
+  else metas.forEach(m => { m.content = color; });
+}
+export function restoreAppBars() {
+  delete document.documentElement.dataset['lockBars'];
+  document.documentElement.style.removeProperty('--system-bar-bottom');
+  setThemeColor(BRAND_BAR_COLOR);
+}
+export function applyLockBars(themeId: string) {
+  const theme = getPinTheme(themeId);
+  document.documentElement.dataset['lockBars'] = theme.token;
+  document.documentElement.style.setProperty('--system-bar-bottom', theme.navBarColor);
+  setThemeColor(theme.statusBarColor);
 }
 const barMap = Object.fromEntries(pinThemes.map(t => [t.id, t.statusBarColor]));
 /** Roda antes do React: pinta a barra com a cor do estilo quando o bloqueio está ativo. */
-export const lockThemeColorInitScript = `try{if(localStorage.getItem('${LOCK_GLOBAL_ACTIVE}')==='1'){var c=${JSON.stringify(barMap)}[localStorage.getItem('${LOCK_GLOBAL_THEME}')||'classico'];if(c){var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=c;}}}catch(e){}`;
+export const lockThemeColorInitScript = `try{if(localStorage.getItem('${LOCK_GLOBAL_ACTIVE}')==='1'&&location.pathname!=='/auth'){var id=localStorage.getItem('${LOCK_GLOBAL_THEME}')||'classico';var c=${JSON.stringify(barMap)}[id];if(c){document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=c});document.documentElement.dataset.lockBars=id;document.documentElement.style.setProperty('--system-bar-bottom',${JSON.stringify(Object.fromEntries(pinThemes.map(t => [t.id, t.navBarColor])))}[id]);}}}catch(e){}`;
