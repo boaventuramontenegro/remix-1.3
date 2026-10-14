@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { obterChavePublica } from "./push.functions";
+import { registerServiceWorker, isRefusedContext } from './pwa';
 
 const b64ToBytes = (b64: string) => {
   const s = atob((b64 + "=".repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
@@ -12,12 +13,7 @@ export const isStandalone = () => typeof window !== "undefined" && (window.match
 /** Assina o Web Push e salva em push_subscriptions. Retorna false se o service worker não estiver ativo (prévia). */
 async function appRegistration() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) throw Error(isIOS() && !isStandalone() ? "Instale o app na Tela de Início para receber notificações." : "Este navegador não suporta notificações.");
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const reg = await Promise.race([navigator.serviceWorker.ready, new Promise<null>(r => { timer = setTimeout(() => r(null), 8000); })]);
-    if (!reg?.active || new URL(reg.scope).origin !== location.origin || new URL(reg.active.scriptURL).pathname !== '/sw.js') throw Error("Não há serviço de notificações ativo neste aparelho. Abra o app publicado e tente novamente.");
-    return reg;
-  } finally { clearTimeout(timer); }
+  return registerServiceWorker();
 }
 export async function assinarPush(): Promise<boolean> {
   if (!("Notification" in window)) throw Error('Este navegador não suporta notificações.');
@@ -38,13 +34,17 @@ export async function assinarPush(): Promise<boolean> {
       await sub.unsubscribe(); sub = null;
     }
   }
-  sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+  try { sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }); }
+  catch (error) {
+    const name = error instanceof Error || error instanceof DOMException ? error.name : 'UnknownError';
+    throw Error(`O navegador não criou a inscrição (${name}). Confira a permissão de notificações do Chrome e do Android e tente novamente.`);
+  }
   const j = sub.toJSON();
   if (!j.keys?.['p256dh'] || !j.keys?.['auth']) throw Error('O navegador não entregou uma inscrição válida.');
   const { error } = await supabase.from('push_subscriptions').upsert({ user_id: user.id, endpoint: sub.endpoint, keys: j.keys }, { onConflict: 'endpoint' });
-  if (error) throw Error('A inscrição não foi salva no servidor. Tente ativar novamente.');
+  if (error) throw Error(`A inscrição não foi salva no servidor (${error.code}). Tente ativar novamente.`);
   const { data, error: readError } = await supabase.from('push_subscriptions').select('id').eq('user_id', user.id).eq('endpoint', sub.endpoint).maybeSingle();
-  if (readError || !data) throw Error('Não foi possível confirmar a inscrição salva. Tente novamente.');
+  if (readError || !data) throw Error(`Não foi possível confirmar a inscrição salva${readError ? ` (${readError.code})` : ''}. Tente novamente.`);
   return true;
 }
 
@@ -61,11 +61,13 @@ export async function cancelarPush() {
 
 export async function statusPush(): Promise<{ ok: boolean; texto: string }> {
   if (typeof window === 'undefined') return { ok: false, texto: '' };
+  if (isRefusedContext()) return { ok: false, texto: 'A prévia não recebe notificações. Use o aplicativo publicado.' };
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return { ok: false, texto: isIOS() && !isStandalone() ? "Instale o app na Tela de Início para receber notificações." : "Este navegador não suporta notificações." };
   if (Notification.permission === 'denied') return { ok: false, texto: "Notificações bloqueadas nas configurações do navegador." };
   if (Notification.permission !== 'granted') return { ok: false, texto: 'Autorize as notificações para inscrever este aparelho.' };
-  const reg = await navigator.serviceWorker.getRegistration();
-  if (!reg?.active || new URL(reg.active.scriptURL).pathname !== '/sw.js') return { ok: false, texto: "Disponível só no app publicado (a prévia não recebe notificações)." };
+  let reg: ServiceWorkerRegistration;
+  try { reg = await appRegistration(); }
+  catch (error) { return { ok: false, texto: error instanceof Error ? error.message : 'Falha ao ativar o serviço de notificações. Tente novamente.' }; }
   const sub = await reg.pushManager.getSubscription();
   if (!sub) return { ok: false, texto: "Este aparelho ainda não está inscrito. Ative novamente para tentar." };
   const { data: { user }, error: authError } = await supabase.auth.getUser();

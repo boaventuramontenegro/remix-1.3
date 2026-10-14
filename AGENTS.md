@@ -19,3 +19,7 @@
 - The existing managed 15-minute reminder callback evaluates each user's local enabled windows and atomically claims each daily window before delivery — no browser timers or overlapping duplicate sends.
 - Device unlock timestamps are per-user and bound to the current protection record; only successful PIN/WebAuthn assertions renew them — remounts, focus and reload never authenticate.
 - Push status requires both an active same-scope browser subscription and an authenticated owner read-back; updates persist atomically without delete-before-insert — preferences alone never prove registration.
+- Workbox precache strips Start's build-only client/ prefix because public assets are served at the origin root.
+- Capture the native install event once in the root and share it across views; a prompt accepted is not an appinstalled event.
+- The static first-paint shell and React loading state share the existing wallet SVG; generated installed icons derive from that same source.
+- Hide financial content synchronously on pagehide/visibility changes and validate persisted unlock time before foreground paint; the visible expiry timer never renews authentication.

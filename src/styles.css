@@ -164,9 +164,9 @@
 .surface { background: var(--card); border-radius: 1.5rem; padding: 1.25rem; box-shadow: var(--shadow-soft); }
 .field { width: 100%; height: 2.75rem; border: 1px solid var(--input); border-radius: .75rem; background: var(--background); padding: 0 .75rem; }
 .chart-tooltip { background: var(--popover); border: 1.5px solid var(--border); border-radius: .75rem; padding: .75rem; color: var(--foreground); box-shadow: var(--shadow-soft); }
-:root { --chart-selected: color-mix(in srgb, var(--primary) 65%, var(--card)); --sticky-edge-shadow: 3px 0 8px -4px var(--foreground); }
-.annual-category { position: sticky; left: 0; z-index: 2; min-width: 120px; background: var(--card); box-shadow: var(--sticky-edge-shadow); }
-.annual-total { position: sticky; right: 0; z-index: 2; min-width: 108px; background: var(--card); }
+:root { --chart-selected: color-mix(in srgb, var(--primary) 65%, var(--card)); }
+.annual-category { min-width: 120px; }
+.annual-total { min-width: 108px; }
 .annual-month { width: 96px; min-width: 96px; }
 .recharts-wrapper, .recharts-wrapper *, .recharts-surface, .recharts-sector, .recharts-rectangle { outline: none !important; -webkit-tap-highlight-color: transparent; }
 .recharts-tooltip-wrapper { max-width: min(224px, calc(100vw - 48px)); }
@@ -176,6 +176,7 @@
 :root {
   --pin-white: #fff;
   --pin-black: #000;
+  --pin-system-shade: #0000004d;
   --pin-galaxy-gradient: linear-gradient(180deg, #321345, #120f29);
   --pin-sunset-gradient: radial-gradient(circle at 90% 8%, #ffe8acb3 0, #ffe8ac00 24%), linear-gradient(180deg, #FB923C, #EC4899 52%, #7C3AED);
   --pin-white-glass: #ffffff20;
@@ -217,7 +218,7 @@
 }
 .lock-screen { position: fixed; inset: 0; height: 100dvh; min-height: 100lvh; z-index: 80; overflow-y: auto; background-image: var(--pin-wallpaper, var(--pin-fallback)); background-size: cover; background-position: center; color: var(--pin-text); isolation: isolate; }
 .lock-screen::before { content: ''; position: fixed; inset: 0; z-index: -1; background: var(--pin-black); opacity: var(--pin-overlay, 0); pointer-events: none; }
-html[data-lock-bars], html[data-lock-bars] body { background-color: var(--system-bar-bottom); }
+html[data-lock-bars], html[data-lock-bars] body { background-color: var(--system-bar-bottom); background-image: var(--system-lock-background); background-size: cover; background-position: center; background-attachment: fixed; }
 .lock-content { width: min(100%, 420px); min-height: 100%; margin: 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 26px; padding: calc(env(safe-area-inset-top) + 12vh) 24px calc(env(safe-area-inset-bottom) + 28px); }
 .lock-body { flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
 .lock-bio-key { width: 64px; height: 64px; }

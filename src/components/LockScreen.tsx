@@ -32,7 +32,7 @@ export function LockScreen({ themeId, tamanho = 4, pin, onPinChange, onComplete,
     return () => { observer.disconnect(); restoreAppBars(); };
   }, [themeId, theme.statusBarColor, preview]);
   const vars = { '--pin-overlay': theme?.escurecimento ?? 0, ...(theme?.fundo && loadedImage === theme.fundo ? { '--pin-wallpaper': `url("${theme.fundo}")` } : {}) } as CSSProperties;
-  return <div className="lock-screen" data-pin-theme={theme?.token} style={vars}>
+  return <div className="lock-screen" data-app-ready data-pin-theme={theme?.token} style={vars}>
     <div className="lock-content">
       <Logo variante="claro" tamanho="lg" className="lock-logo" />
       <div className="lock-body">
