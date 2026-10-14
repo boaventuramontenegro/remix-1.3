@@ -106,8 +106,8 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-        <script dangerouslySetInnerHTML={{ __html: lockThemeColorInitScript }} />
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: lockThemeColorInitScript }} />
       </head>
       <body>
         {children}
