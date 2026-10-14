@@ -1,4 +1,11 @@
-# Requested Meu Bolso adjustments
+# Current priority corrections
+- [ ] Three-minute authenticated unlock session and biometric-to-PIN fallback
+- [ ] Lock-only system theme colors and restoration
+- [ ] Real push registration, persisted status, delivery errors and reminder deduplication
+- [ ] Settings card order and inline collapse preserving controls
+- [ ] Automated tests and signed-in browser checks; report physical-device limitations
+
+# Earlier requested Meu Bolso adjustments (not expanded in this task)
 - [ ] A: Independent device security, biometric-first lock, 4–8 digit PIN and delayed recovery
 - [ ] B: Three lock themes, optimized wallpaper, full-screen previews and saved theme
 - [ ] C: Diagnose VAPID/subscription failures, repair registration and report device status
