@@ -1,36 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { deveLembrar } from "@/lib/budget";
+import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
+import { deveLembrar, agoraNoFuso } from "@/lib/budget";
+
+const TURNOS = ["manha", "tarde", "noite"] as const;
 
 export const Route = createFileRoute("/api/public/push-lembrete")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const authFailure = await authenticateCronRequest(request);
+        if (authFailure) return authFailure;
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        // O agendador lê o segredo de uma tabela só do servidor; comparamos com o mesmo valor.
-        const provided = request.headers.get("x-cron-secret") ?? "";
-        const { data: row } = await supabaseAdmin.from("app_internal").select("valor").eq("chave", "push_cron_secret").maybeSingle();
-        const secret = row?.valor ?? "";
-        let diff = secret.length === provided.length && secret.length > 0 ? 0 : 1;
-        for (let i = 0; i < Math.min(secret.length, provided.length); i++) diff |= secret.charCodeAt(i) ^ provided.charCodeAt(i);
-        if (diff !== 0) return new Response("Unauthorized", { status: 401 });
         const { enviarParaUsuario } = await import("@/lib/push.server");
-        const { data: cfgs } = await supabaseAdmin
-          .from("configuracoes")
-          .select("user_id, notif_horario, fuso_horario, timezone, ultimo_lembrete")
-          .eq("notif_ativas", true);
+        const { data: cfgs } = await supabaseAdmin.from("configuracoes").select("*").eq("notif_ativas", true);
         let enviados = 0;
         for (const c of cfgs ?? []) {
           const fuso = c.fuso_horario || c.timezone || "America/Sao_Paulo";
-          let r: ReturnType<typeof deveLembrar>;
-          try { r = deveLembrar(String(c.notif_horario).slice(0, 5), fuso, c.ultimo_lembrete); } catch { continue; }
-          if (!r.enviar) continue;
-          await supabaseAdmin.from("configuracoes").update({ ultimo_lembrete: r.data }).eq("user_id", c.user_id);
-          enviados += await enviarParaUsuario(supabaseAdmin, c.user_id, {
-            title: "Meu Bolso",
-            body: "Já anotou seus gastos de hoje? Leva só um minuto. 💚",
-            url: "/inicio",
-            tag: "lembrete",
-          });
+          for (const t of TURNOS) {
+            if (!c[`lembrete_${t}`]) continue;
+            const ultimo = c[`lembrete_${t}_proximo`] ? agoraNoFuso(fuso, new Date(c[`lembrete_${t}_proximo`] as string)).data : null;
+            let r: ReturnType<typeof deveLembrar>;
+            try { r = deveLembrar(String(c[`lembrete_${t}_horario`]).slice(0, 5), fuso, ultimo); } catch { continue; }
+            if (!r.enviar) continue;
+            await supabaseAdmin.from("configuracoes").update({ [`lembrete_${t}_proximo`]: new Date().toISOString() }).eq("user_id", c.user_id);
+            enviados += await enviarParaUsuario(supabaseAdmin, c.user_id, { title: "Meu Bolso", body: "Já registrou seus gastos de hoje?", url: "/inicio", tag: `lembrete-${t}` });
+          }
         }
         return Response.json({ ok: true, enviados });
       },
