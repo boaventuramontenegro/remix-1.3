@@ -14,14 +14,15 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { registerServiceWorker } from "@/lib/pwa";
+import { registerServiceWorker, captureInstallPrompt } from "@/lib/pwa";
+import { startupCss, startupScript } from '@/lib/startup';
 import { LoadingScreen } from "@/components/Logo";
 import { themeInitScript, useTemaResolvido } from "@/lib/theme";
 import { lockThemeColorInitScript, restoreAppBars, setLockGlobals } from "@/lib/pinThemes";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div data-startup-fallback className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">Página não encontrada</h2>
@@ -44,7 +45,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div data-startup-fallback className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">Algo deu errado</h1>
         <p className="mt-2 text-sm text-muted-foreground">Tente novamente ou volte ao início.</p>
@@ -85,9 +86,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/png", sizes:"32x32", href: "/favicon.png" },
+      { rel: "preload", as: "image", href: "/wallet-solid.svg" },
+      { rel: "icon", type: "image/png", sizes:"32x32", href: "/favicon.png?v=wallet-solid" },
       { rel: "manifest", href: "/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/icons/icon-180.png" },
+      { rel: "apple-touch-icon", href: "/icons/icon-180.png?v=wallet-solid" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" },
@@ -105,11 +107,14 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
+        <style dangerouslySetInnerHTML={{ __html: startupCss }} />
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: lockThemeColorInitScript }} />
       </head>
       <body>
+        <div id="meubolso-startup" role="status" aria-label="Carregando Meu Bolso"><img src="/wallet-solid.svg" width="80" height="80" alt="" /><div id="meubolso-startup-error" hidden>Não foi possível concluir o carregamento.<br /><a href="">Tentar novamente</a></div></div>
+        <script dangerouslySetInnerHTML={{ __html: startupScript }} />
         {children}
         <Scripts />
       </body>
@@ -122,7 +127,8 @@ function RootComponent() {
   const router = useRouter();
 
   useEffect(() => {
-    registerServiceWorker();
+    captureInstallPrompt();
+    void registerServiceWorker().catch(() => { /* Settings displays registration errors on retry. */ });
     const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       if (event === "SIGNED_OUT") { setLockGlobals(false, 'classico'); restoreAppBars(); }

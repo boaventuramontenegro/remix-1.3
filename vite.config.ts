@@ -23,6 +23,9 @@ export default defineConfig({
         manifest: false, // served from public/manifest.webmanifest
         workbox: {
           globPatterns: ["**/*.{js,css,png,webp,svg,ico,webmanifest,woff2}"],
+          // Start emits public assets under client/, but serves them at the origin root.
+          // Without this transform every precache fetch returns 404 and installation fails.
+          modifyURLPrefix: { "client/": "" },
           navigateFallback: null,
           cleanupOutdatedCaches: true,
           importScripts: ["/push-sw.js"],

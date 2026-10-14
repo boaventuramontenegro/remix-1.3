@@ -1,4 +1,14 @@
-# Current priority corrections
+# Android real-test corrections
+- [x] Three-minute lifecycle: visible expiry timer plus synchronous foreground privacy gate; actual PIN/reload checked, Android reproduction remains pending
+- [x] Published push diagnosis: 64 invalid client/ precache URLs; published worker becomes redundant; fixed URL transform and awaited activation/retry diagnostics
+- [x] Lock document canvas extended with original wallpaper/gradient; opaque platform theme colors retained where transparency is unavailable
+- [x] Critical green first-paint shell and shared wallet SVG-derived icons; startup error retry retained
+- [x] Natural annual-table scrolling verified with real saved rows at 390px and 1280px
+- [x] Themed installation confirmation; early captured native event, cancel and accepted/completed distinctions tested
+- [x] Automated regressions and authenticated small/large browser checks; no runtime errors observed
+- [ ] Physical Android verification — requires user's device and published update
+
+# Previous priority corrections
 - [x] Three-minute device unlock session and biometric-to-PIN fallback; exact boundary and real PIN/reload checks
 - [x] Lock-only system theme colors and restoration; three styles tested in document, Android rendering not claimed
 - [x] Push persistence/read-back, truthful status and safe delivery diagnostics; contract tests passed

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { User, Settings, LogOut, HelpCircle, Lock, Download, Share, PlusSquare } from 'lucide-react';
+import { User, Settings, LogOut, HelpCircle, Lock, Download } from 'lucide-react';
 import { Button } from './ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
 import { BottomSheet } from './BottomSheet';
@@ -16,17 +16,17 @@ const item = 'w-full justify-start rounded-xl';
 
 export function ProfileMenu() {
   const [open, setOpen] = useState(false);
-  const [iosSheet, setIosSheet] = useState(false);
+  const [installSheet, setInstallSheet] = useState(false);
   const [instalado, setInstalado] = useState(true);
   const [ios, setIos] = useState(false);
   const { data: profile } = useQuery(profileQuery);
   const { data: user } = useQuery(accountQuery);
-  const { canInstall, install } = useInstallPrompt();
+  const { canInstall, install, isInstalled } = useInstallPrompt();
   const qc = useQueryClient();
   const navigate = useNavigate();
   useEffect(() => { setInstalado(isStandalone()); setIos(isIOS()); }, []);
   const nome = profile?.nome?.trim();
-  const mostrarInstalar = !instalado;
+  const mostrarInstalar = !instalado && !isInstalled;
 
   const sair = async () => { await qc.cancelQueries(); qc.clear(); const { error } = await supabase.auth.signOut(); if (error) { toast.error('Não foi possível sair.'); return; } setOpen(false); navigate({ to: '/auth', replace: true }); };
   const bloquear = () => {
@@ -35,10 +35,13 @@ export function ProfileMenu() {
     window.dispatchEvent(new Event('meubolso-bloquear'));
   };
   const instalar = async () => {
-    setOpen(false);
-    if (ios) { setIosSheet(true); return; }
-    if (canInstall) { if (await install()) { setInstalado(true); toast.success('App instalado'); } return; }
-    toast('Abra o app publicado no Chrome para instalar com um toque.', { id: 'instalar' });
+    try {
+      const result = await install();
+      if (result === 'accepted') { setInstallSheet(false); toast('Instalação aceita. Aguarde a conclusão pelo navegador.'); }
+      else if (result === 'installed') { setInstallSheet(false); setInstalado(true); }
+      else if (result === 'cancelled') { setInstallSheet(false); toast('Instalação cancelada.'); }
+      else toast('A instalação direta não está disponível neste navegador agora.');
+    } catch { toast.error('Não foi possível iniciar a instalação. Tente novamente.'); }
   };
 
   return (
@@ -58,18 +61,14 @@ export function ProfileMenu() {
           <Button variant="ghost" asChild className={item}><Link to="/configuracoes" onClick={() => setOpen(false)}><Settings />Configurações</Link></Button>
           <Button variant="ghost" asChild className={item}><Link to="/ajuda" onClick={() => setOpen(false)}><HelpCircle />Ajuda e sugestão</Link></Button>
           <Button variant="ghost" onClick={bloquear} className={item}><Lock />Bloquear app</Button>
-          {mostrarInstalar && <Button variant="ghost" onClick={instalar} className={item}><Download />Instalar app</Button>}
+          {mostrarInstalar && <Button variant="ghost" onClick={() => { setOpen(false); setInstallSheet(true); }} className={item}><Download />Instalar app</Button>}
           <div className="my-1 border-t" />
           <Button variant="ghost" onClick={sair} className={`${item} text-destructive/80 hover:text-destructive`}><LogOut />Sair</Button>
         </PopoverContent>
       </Popover>
-      <BottomSheet open={iosSheet} onOpenChange={setIosSheet} title="Instalar no iPhone" description="Leva menos de 10 segundos.">
-        <ol className="space-y-3 text-sm">
-          <li className="flex items-center gap-3 rounded-2xl bg-muted p-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">1</span>Abra no <strong>Safari</strong> e toque em <Share size={18} className="text-primary" /> Compartilhar</li>
-          <li className="flex items-center gap-3 rounded-2xl bg-muted p-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">2</span>Escolha <PlusSquare size={18} className="text-primary" /> <strong>Adicionar à Tela de Início</strong></li>
-          <li className="flex items-center gap-3 rounded-2xl bg-muted p-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">3</span>Toque em <strong>Adicionar</strong> no canto superior</li>
-        </ol>
-        <Button className="mt-4 h-11 w-full rounded-xl" onClick={() => setIosSheet(false)}>Entendi</Button>
+      <BottomSheet open={installSheet} onOpenChange={setInstallSheet} title="Instalar Meu Bolso" description={canInstall ? 'Deseja instalar o Meu Bolso neste aparelho?' : 'A instalação direta não está disponível neste navegador agora.'}>
+        {!canInstall && <p className="mb-4 text-sm text-muted-foreground">{ios ? 'No Safari, use Compartilhar e Adicionar à Tela de Início.' : 'Abra o site publicado no Chrome. Se a instalação direta continuar indisponível, use a opção Instalar app do navegador, quando oferecida; um atalho comum não equivale à instalação.'}</p>}
+        <div className="flex gap-2"><Button variant="outline" className="h-12 flex-1 rounded-xl" onClick={() => setInstallSheet(false)}>Cancelar</Button><Button className="h-12 flex-1 rounded-xl" disabled={!canInstall} onClick={instalar}>Instalar</Button></div>
       </BottomSheet>
     </>
   );

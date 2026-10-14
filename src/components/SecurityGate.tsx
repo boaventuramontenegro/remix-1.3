@@ -9,6 +9,8 @@ import { readPin, checkPin, biometricUnlock, biometriaDisponivel, limparSeguranc
 import { readPinTheme, setLockGlobals } from '@/lib/pinThemes';
 import { hasUnlockSession, validateUnlockSession, clearUnlockSession, unlockSessionKey } from '@/lib/unlock-session';
 import { supabase } from '@/integrations/supabase/client';
+import { flushSync } from 'react-dom';
+import { UNLOCK_SESSION_MS } from '@/lib/unlock-session';
 
 export function SecurityGate({ children }: { children: ReactNode }) {
   const { data: user, isPending } = useQuery(accountQuery);
@@ -30,6 +32,9 @@ export function SecurityGate({ children }: { children: ReactNode }) {
   const automaticEpoch = useRef(-1);
   const automaticBio = useRef<() => void>(() => {});
   const [lockVersion, setLockVersion] = useState(0);
+  const [suspended, setSuspended] = useState(false);
+  const expiryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const scheduleExpiry = useRef<() => void>(() => {});
   const navigate = useNavigate();
   const qc = useQueryClient();
   const rec = user && locked !== null ? readPin(user.id) : null;
@@ -61,6 +66,18 @@ export function SecurityGate({ children }: { children: ReactNode }) {
       const r = readPin(user.id);
       if ((r?.hash || (r?.credential && r.biometricEnabled !== false)) && !hasUnlockSession(user.id)) lock();
     };
+    // Timer protects visible use too; foreground always checks persisted elapsed time.
+    // Neither path creates or extends a validated session.
+    scheduleExpiry.current = () => {
+      clearTimeout(expiryTimer.current);
+      if (lockedRef.current) return;
+      try {
+        const session = JSON.parse(localStorage.getItem(unlockSessionKey(user.id)) ?? 'null');
+        if (!session || !hasUnlockSession(user.id)) return;
+        const remaining = session.validatedAt + UNLOCK_SESSION_MS - Date.now();
+        expiryTimer.current = setTimeout(() => { resume(); }, Math.max(0, remaining));
+      } catch { /* no session means locked on foreground */ }
+    };
     const initialize = () => {
       const r = readPin(user.id);
       const on = !!r?.hash || !!(r?.credential && r.biometricEnabled !== false);
@@ -69,7 +86,18 @@ export function SecurityGate({ children }: { children: ReactNode }) {
       else { lockedRef.current = false; setLocked(false); setLockGlobals(false, th); }
     };
     initialize();
-    const visibility = () => { if (!document.hidden) resume(); };
+    scheduleExpiry.current();
+    const foreground = () => {
+      if (document.hidden) return;
+      // Commit the privacy decision before the browser can paint restored content.
+      flushSync(() => { resume(); setSuspended(false); });
+      scheduleExpiry.current();
+    };
+    const visibility = () => {
+      if (document.hidden) { flushSync(() => setSuspended(true)); }
+      else foreground();
+    };
+    const pagehide = () => { flushSync(() => setSuspended(true)); };
     const refresh = () => {
       setVersion(v => v + 1);
       const r = readPin(user.id);
@@ -83,18 +111,22 @@ export function SecurityGate({ children }: { children: ReactNode }) {
       if (e.key === unlockSessionKey(user.id)) {
         if (hasUnlockSession(user.id)) { bioController.current?.abort(); lockedRef.current = false; setLocked(false); setLockGlobals(false, readPinTheme(user.id, config.pin_tema)); }
         else resume();
+        scheduleExpiry.current();
       } else if (e.key === `meubolso-pin-${user.id}`) { refresh(); resume(); }
     };
     document.addEventListener('visibilitychange', visibility);
-    window.addEventListener('pageshow', resume); window.addEventListener('focus', resume);
+    window.addEventListener('pageshow', foreground); window.addEventListener('focus', foreground);
+    window.addEventListener('pagehide', pagehide);
     window.addEventListener('storage', storage);
     window.addEventListener('meubolso-bloquear', lock);
     window.addEventListener('meubolso-seguranca', refresh);
     window.addEventListener('meubolso-pin-tema', themeChanged);
     return () => {
       lockEpoch.current++; bioController.current?.abort(); lockedRef.current = false;
+      clearTimeout(expiryTimer.current);
       document.removeEventListener('visibilitychange', visibility);
-      window.removeEventListener('pageshow', resume); window.removeEventListener('focus', resume);
+      window.removeEventListener('pageshow', foreground); window.removeEventListener('focus', foreground);
+      window.removeEventListener('pagehide', pagehide);
       window.removeEventListener('storage', storage);
       window.removeEventListener('meubolso-bloquear', lock);
       window.removeEventListener('meubolso-seguranca', refresh);
@@ -106,6 +138,7 @@ export function SecurityGate({ children }: { children: ReactNode }) {
     if (!user) return;
     validateUnlockSession(user.id); lockedRef.current = false;
     setLocked(false); setPin(''); setLockGlobals(false, theme);
+    scheduleExpiry.current();
   };
 
   useEffect(() => {
@@ -170,7 +203,7 @@ export function SecurityGate({ children }: { children: ReactNode }) {
     navigate({ to: '/auth', replace: true });
   };
   if (isPending || locked === null) return <LoadingScreen />;
-  if (!locked) return children;
+  if (!locked) return <div data-app-ready hidden={suspended}>{children}</div>;
   return <LockScreen themeId={theme} tamanho={rec?.length ?? 4} pin={pin} onPinChange={setPin} onComplete={unlock} showPin={hasPin && showPin} showBio={hasBio} bioFailed={bioFailed} onBio={() => void tryBio()} busy={busy || cooling} tremor={tremor} message={cooling ? `Aguarde ${remaining} s para tentar novamente.` : message}>
     {rec?.recoveryAllowed && !cooling && <Button variant="ghost" className="text-brand-white hover:bg-brand-white/20 hover:text-brand-white text-xs" disabled={busy} onClick={recover}>Entrar com e-mail e senha</Button>}
   </LockScreen>;

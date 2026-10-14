@@ -34,6 +34,27 @@ describe('Three-minute device session', () => {
     fireEvent(window, new Event('focus'));
     await screen.findByText('PIN'); expect(screen.queryByText('Financeiro privado')).not.toBeInTheDocument();
   });
+  it('hides the private snapshot in background and restores before three minutes without renewal', () => {
+    validateUnlockSession('test-user'); const before = localStorage.getItem('meubolso-desbloqueio-test-user');
+    gate(); Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    fireEvent(document, new Event('visibilitychange'));
+    expect(screen.getByText('Financeiro privado')).not.toBeVisible();
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    fireEvent(document, new Event('visibilitychange')); fireEvent(window, new Event('focus'));
+    expect(screen.getByText('Financeiro privado')).toBeVisible();
+    expect(localStorage.getItem('meubolso-desbloqueio-test-user')).toBe(before); expect(state.bio).not.toHaveBeenCalled();
+  });
+  it('expires during visible use at the exact deadline without focus events', () => {
+    vi.useFakeTimers(); validateUnlockSession('test-user'); gate();
+    act(() => vi.advanceTimersByTime(UNLOCK_SESSION_MS - 1));
+    expect(screen.getByText('Financeiro privado')).toBeVisible();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByText('Financeiro privado')).not.toBeInTheDocument();
+  });
+  it('rejects an expired session on reload instead of briefly rendering private data', () => {
+    validateUnlockSession('test-user', Date.now() - UNLOCK_SESSION_MS);
+    gate(); expect(screen.queryByText('Financeiro privado')).not.toBeInTheDocument();
+  });
 });
 describe('Biometric fallback', () => {
   it.each(['cancelled', 'failed', 'unavailable'])('makes PIN immediately usable after %s', async kind => {

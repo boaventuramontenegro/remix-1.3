@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assinarPush, statusPush } from '@/lib/push-client';
 const mocks = vi.hoisted(() => ({ query: vi.fn(), auth: vi.fn(), key: vi.fn(), sub: vi.fn(), subscribe: vi.fn() }));
+vi.mock('@/lib/pwa', () => ({ isRefusedContext: () => false, registerServiceWorker: () => navigator.serviceWorker.ready }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { from: () => mocks.query(), auth: { getUser: () => mocks.auth() } } }));
 vi.mock('@/lib/push.functions', () => ({ obterChavePublica: () => mocks.key() }));
 function query(data: unknown, error: unknown = null) {
@@ -37,5 +38,10 @@ describe('Push registration contracts (controlled API tests)', () => {
     vi.stubGlobal('Notification', { permission: 'denied' });
     await expect(assinarPush()).rejects.toThrow('Autorize'); expect((await statusPush()).texto).toContain('bloqueadas');
     expect(mocks.subscribe).not.toHaveBeenCalled();
+  });
+  it('reports the browser subscription error without claiming registration', async () => {
+    mocks.sub.mockResolvedValue(null); mocks.subscribe.mockRejectedValue(new DOMException('private details', 'AbortError'));
+    await expect(assinarPush()).rejects.toThrow('AbortError');
+    expect(mocks.query).not.toHaveBeenCalled();
   });
 });
