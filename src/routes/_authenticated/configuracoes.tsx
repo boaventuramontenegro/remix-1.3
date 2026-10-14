@@ -8,7 +8,7 @@ import { applyTheme } from "@/lib/theme";
 import { FORMAS_PAGAMENTO } from "@/lib/format";
 import { pageMeta } from "@/lib/page-meta";
 import { useInstallPrompt } from "@/lib/pwa";
-import { assinarPush, cancelarPush, isIOS, isStandalone } from "@/lib/push-client";
+import { assinarPush, cancelarPush, isIOS, isStandalone, statusPush } from "@/lib/push-client";
 import { enviarTeste } from "@/lib/push.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Switch } from "@/components/ui/switch";
@@ -92,7 +92,9 @@ function Configuracoes() {
     setInstalado(isStandalone());
     setIos(isIOS());
     if ("Notification" in window) setPerm(Notification.permission);
+    void statusPush().then(setPushStatus).catch(() => {});
   }, []);
+  const [pushStatus, setPushStatus] = useState<{ ok: boolean; texto: string } | null>(null);
   const instalar = async () => { if (await install()) { setInstalado(true); toast.success("App instalado"); } };
 
   const toggleNotif = async (on: boolean) => {
@@ -102,10 +104,11 @@ function Configuracoes() {
       if (p !== "granted") { toast.error("Permissão negada. Libere nas configurações do navegador."); return; }
       try { if (!(await assinarPush())) toast.message("As notificações funcionam no app publicado/instalado."); } catch { toast.error("Não foi possível ativar as notificações."); return; }
       set({ notif_ativas: true, fuso_horario: Intl.DateTimeFormat().resolvedOptions().timeZone });
-    } else { await cancelarPush().catch(() => {}); set({ notif_ativas: false }); }
+      setPushStatus(await statusPush().catch(() => null));
+    } else { await cancelarPush().catch(() => {}); set({ notif_ativas: false }); setPushStatus(await statusPush().catch(() => null)); }
   };
   const teste = async () => {
-    try { const r = await enviarTeste(); r.enviados ? toast.success("Notificação enviada") : toast.error("Nenhum aparelho inscrito ainda."); } catch { toast.error("Não foi possível enviar."); }
+    try { const r = await enviarTeste(); r.enviados ? toast.success("Notificação enviada") : toast.error("Nenhum aparelho inscrito. Ative as notificações no app publicado/instalado."); } catch { toast.error("Não foi possível enviar."); }
   };
   const apagarGastos = async () => {
     if (!user) return;
@@ -146,6 +149,7 @@ function Configuracoes() {
       </Card>
       <Card icon={Bell} title="Notificações" salvo={salvo}>
         <Row label="Ativar notificações"><Switch checked={config.notif_ativas} onCheckedChange={toggleNotif} /></Row>
+        {pushStatus && <p className={`py-1 text-xs ${pushStatus.ok ? "text-primary" : "text-muted-foreground"}`}>{pushStatus.texto}</p>}
         {perm === "denied" && <p className="py-2 text-xs text-destructive">As notificações estão bloqueadas. Toque no cadeado ao lado do endereço (ou nas configurações do app) e permita notificações.</p>}
         {ios && !instalado && <p className="py-2 text-xs text-muted-foreground">No iPhone, as notificações só funcionam com o app instalado na Tela de Início.</p>}
         {(['manha','tarde','noite'] as const).map(turno=><Row key={turno} label={turno==='manha'?'Manhã':turno==='tarde'?'Tarde':'Noite'}><div className="flex items-center gap-2"><Button variant="ghost" onClick={()=>{const [h,m]=config[`lembrete_${turno}_horario`].split(':');setHora(h ?? '09');setMinuto(m ?? '00');setHorarioSheet(turno);}}>{config[`lembrete_${turno}_horario`].slice(0,5)}<ChevronRight size={16}/></Button><Switch aria-label={`Lembrete ${turno}`} checked={config[`lembrete_${turno}`]} onCheckedChange={v=>set({[`lembrete_${turno}`]:v})}/></div></Row>)}
