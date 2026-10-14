@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { registerServiceWorker } from "@/lib/pwa";
 import { LoadingScreen } from "@/components/Logo";
 import { themeInitScript, useTemaResolvido } from "@/lib/theme";
+import { lockThemeColorInitScript } from "@/lib/pinThemes";
 
 function NotFoundComponent() {
   return (
@@ -105,6 +106,7 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script dangerouslySetInnerHTML={{ __html: lockThemeColorInitScript }} />
         <HeadContent />
       </head>
       <body>

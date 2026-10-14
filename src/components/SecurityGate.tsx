@@ -6,7 +6,7 @@ import { LockScreen } from './LockScreen';
 import { Button } from './ui/button';
 import { accountQuery, usePreferences } from '@/lib/preferences';
 import { readPin, checkPin, biometricUnlock, biometriaDisponivel, limparSeguranca, registerFailure, resetFailures } from '@/lib/device-security';
-import { readPinTheme } from '@/lib/pinThemes';
+import { readPinTheme, setLockGlobals } from '@/lib/pinThemes';
 import { supabase } from '@/integrations/supabase/client';
 
 export function SecurityGate({ children }: { children: ReactNode }) {
@@ -17,6 +17,7 @@ export function SecurityGate({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [showPin, setShowPin] = useState(false);
+  const [bioFailed, setBioFailed] = useState(false);
   const [message, setMessage] = useState('');
   const [tremor, setTremor] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -41,8 +42,9 @@ export function SecurityGate({ children }: { children: ReactNode }) {
       const bio = !!r?.credential && r.biometricEnabled !== false;
       setLocked(!!r?.hash || bio);
       setShowPin(!!r?.hash && !bio);
-      setPin(''); setMessage(''); setNow(Date.now());
-      setTheme(readPinTheme(user.id, config.pin_tema));
+      setPin(''); setMessage(''); setBioFailed(false); setNow(Date.now());
+      const th = readPinTheme(user.id, config.pin_tema);
+      setTheme(th); setLockGlobals(!!r?.hash || bio, th);
     };
     lock();
     let hiddenAt: number | null = null;
@@ -56,7 +58,9 @@ export function SecurityGate({ children }: { children: ReactNode }) {
     const refresh = () => {
       setVersion(v => v + 1);
       const r = readPin(user.id);
-      if (!r?.hash && !(r?.credential && r.biometricEnabled !== false)) setLocked(false);
+      const on = !!r?.hash || !!(r?.credential && r.biometricEnabled !== false);
+      setLockGlobals(on, readPinTheme(user.id, config.pin_tema));
+      if (!on) setLocked(false);
     };
     const themeChanged = () => setTheme(readPinTheme(user.id, config.pin_tema));
     document.addEventListener('visibilitychange', visibility);
@@ -83,8 +87,9 @@ export function SecurityGate({ children }: { children: ReactNode }) {
       resetFailures(user.id); setLocked(false); setPin('');
     } catch {
       if (epoch !== lockEpoch.current) return;
-      if (readPin(user.id)?.hash) { setShowPin(true); setMessage('Não foi possível usar a digital. Digite seu PIN.'); }
-      else { registerFailure(user.id); setMessage('Digital não reconhecida. Toque para tentar de novo.'); }
+      setBioFailed(true);
+      if (readPin(user.id)?.hash) { setShowPin(true); setMessage('Digite seu PIN'); }
+      else { registerFailure(user.id); setMessage('Digital não reconhecida'); }
       setNow(Date.now()); setVersion(v => v + 1);
     } finally { busyRef.current = false; setBusy(false); }
   };
@@ -116,8 +121,7 @@ export function SecurityGate({ children }: { children: ReactNode }) {
   };
   if (isPending || locked === null) return <LoadingScreen />;
   if (!locked) return children;
-  return <LockScreen themeId={theme} tamanho={rec?.length ?? 4} pin={pin} onPinChange={setPin} onComplete={unlock} showPin={hasPin && showPin} showBio={hasBio} onBio={() => void tryBio()} busy={busy || cooling} tremor={tremor} message={cooling ? `Aguarde ${remaining} s para tentar novamente.` : message}>
-    {cooling && showPin && <p className="lock-hint">Aguarde {remaining} s</p>}
+  return <LockScreen themeId={theme} tamanho={rec?.length ?? 4} pin={pin} onPinChange={setPin} onComplete={unlock} showPin={hasPin && showPin} showBio={hasBio} bioFailed={bioFailed} onBio={() => void tryBio()} busy={busy || cooling} tremor={tremor} message={cooling ? `Aguarde ${remaining} s para tentar novamente.` : message}>
     {rec?.recoveryAllowed && !cooling && <Button variant="ghost" className="text-brand-white hover:bg-brand-white/20 hover:text-brand-white text-xs" disabled={busy} onClick={recover}>Entrar com e-mail e senha</Button>}
   </LockScreen>;
 }
