@@ -1,3 +1,11 @@
+# Final Android adjustments
+- [ ] Increase validated security session to five minutes and test exact expiry/reload/foreground
+- [ ] Keep existing startup screen visible for two seconds minimum and until ready; test error recovery
+- [ ] Investigate native transparency and use black opaque lock-bar fallback without altering normal screens
+- [ ] Generate transparent monochrome notification wallet badge from existing logo; preserve delivery logic
+- [ ] Remove proven biometric initialization waits without duplicate requests or PIN regressions
+- [ ] Run relevant tests and browser checks; report physical Android limitations
+
 # Android real-test corrections
 - [x] Three-minute lifecycle: visible expiry timer plus synchronous foreground privacy gate; actual PIN/reload checked, Android reproduction remains pending
 - [x] Published push diagnosis: 64 invalid client/ precache URLs; published worker becomes redundant; fixed URL transform and awaited activation/retry diagnostics

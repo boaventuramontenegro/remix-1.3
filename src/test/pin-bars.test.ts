@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyLockBars, restoreAppBars, lockThemeColorInitScript, pinThemes, BRAND_BAR_COLOR, setLockGlobals } from '@/lib/pinThemes';
+import { applyLockBars, restoreAppBars, lockThemeColorInitScript, pinThemes, BRAND_BAR_COLOR, LOCK_BAR_COLOR, setLockGlobals } from '@/lib/pinThemes';
 afterEach(() => { restoreAppBars(); localStorage.clear(); });
 describe('Lock document colors, not physical Android bars', () => {
   it.each(pinThemes)('sets and restores $nome without changing the app theme', theme => {
     document.documentElement.classList.add('dark');
     applyLockBars(theme.id);
+    expect(theme.statusBarColor).toBe(LOCK_BAR_COLOR);
+    expect(document.documentElement.style.getPropertyValue('--system-bar-bottom')).toBe('#000000');
     expect(document.documentElement.dataset['lockBars']).toBe(theme.id);
     expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(theme.statusBarColor);
     expect(document.documentElement.style.getPropertyValue('--system-lock-background')).not.toBe('');
@@ -14,6 +16,7 @@ describe('Lock document colors, not physical Android bars', () => {
   });
   it('applies the saved galaxy color in the pre-React initialization script', () => {
     setLockGlobals(true,'galaxia');new Function(lockThemeColorInitScript)();
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#000000');
     expect(document.documentElement.dataset['lockBars']).toBe('galaxia');
     expect(document.documentElement.style.getPropertyValue('--system-lock-background')).toContain('/pin/galaxia.webp');
   });

@@ -5,7 +5,7 @@ import { LoadingScreen } from './Logo';
 import { LockScreen } from './LockScreen';
 import { Button } from './ui/button';
 import { accountQuery, usePreferences } from '@/lib/preferences';
-import { readPin, checkPin, biometricUnlock, biometriaDisponivel, limparSeguranca, registerFailure, resetFailures } from '@/lib/device-security';
+import { readPin, checkPin, biometricUnlock, canAttemptBiometric, prepareBiometric, limparSeguranca, registerFailure, resetFailures } from '@/lib/device-security';
 import { readPinTheme, setLockGlobals } from '@/lib/pinThemes';
 import { hasUnlockSession, validateUnlockSession, clearUnlockSession, unlockSessionKey } from '@/lib/unlock-session';
 import { supabase } from '@/integrations/supabase/client';
@@ -80,6 +80,9 @@ export function SecurityGate({ children }: { children: ReactNode }) {
     };
     const initialize = () => {
       const r = readPin(user.id);
+      if (r?.credential && r.biometricEnabled !== false && canAttemptBiometric()) {
+        void prepareBiometric().catch(() => { /* Actual attempt reports failure and retains PIN fallback. */ });
+      }
       const on = !!r?.hash || !!(r?.credential && r.biometricEnabled !== false);
       const th = readPinTheme(user.id, config.pin_tema); setTheme(th);
       if (on && !hasUnlockSession(user.id)) lock();
@@ -158,7 +161,7 @@ export function SecurityGate({ children }: { children: ReactNode }) {
         timeout = setTimeout(() => { controller.abort(); reject(Error('Verificação expirou.')); }, 20000);
       });
       await Promise.race([(async () => {
-        if (!(await biometriaDisponivel()) || controller.signal.aborted) throw Error('unavailable');
+        if (!canAttemptBiometric() || controller.signal.aborted) throw Error('unavailable');
         await biometricUnlock(user.id, controller.signal);
       })(), expired]);
       if (epoch !== lockEpoch.current || controller.signal.aborted) return;
