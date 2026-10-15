@@ -10,6 +10,14 @@ export function registerFailure(userId: string) { const r = readPin(userId) ?? e
 export function resetFailures(userId: string) { const r = readPin(userId); if (r) saveSecurity(userId, { ...r, attempts: 0, retryAt: 0, recoveryAllowed: false }); }
 export async function checkPin(userId: string, pin: string) { const r = readPin(userId); if (!r?.hash) return false; if ((r.retryAt ?? 0) > Date.now()) throw Error('Aguarde 30 segundos antes de tentar novamente.'); const ok = pin.length === r.length && await pinHash(pin, r.salt) === r.hash; if (ok) resetFailures(userId); else registerFailure(userId); return ok; }
 const randomChallenge = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+// Fetch once, without initiating a ceremony; unlock must not await a hardware
+// availability probe when an already registered platform credential exists.
+let biometricBrowser: Promise<typeof import('@simplewebauthn/browser')> | undefined;
+export function prepareBiometric() {
+  biometricBrowser ??= import('@simplewebauthn/browser').catch(error => { biometricBrowser = undefined; throw error; });
+  return biometricBrowser;
+}
+export function canAttemptBiometric() { return !bioContextUnavailable() && typeof PublicKeyCredential !== 'undefined'; }
 export async function enableBiometric(userId: string) { const current = readPin(userId); if (current?.credential) { setBiometricEnabled(userId, true); return; } const { startRegistration } = await import('@simplewebauthn/browser'); const id = btoa(String.fromCharCode(...new TextEncoder().encode(userId))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''); const response = await startRegistration({ optionsJSON: { challenge: randomChallenge(), rp: { name: 'Meu Bolso', id: location.hostname }, user: { id, name: userId, displayName: 'Meu Bolso' }, pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }], authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' }, attestation: 'none' } }); saveSecurity(userId, { ...(readPin(userId) ?? empty()), credential: response.id, biometricEnabled: true }); }
 export function setBiometricEnabled(userId: string, on: boolean) { const r = readPin(userId); if (r?.credential) saveSecurity(userId, { ...r, biometricEnabled: on }); }
 export function removePin(userId: string) { const r = readPin(userId); if (r) saveSecurity(userId, { ...r, salt: '', hash: '', attempts: 0, retryAt: 0, recoveryAllowed: false }); }
@@ -22,7 +30,7 @@ export async function biometricUnlock(userId: string, signal?: AbortSignal) {
   const r = readPin(userId);
   if (!r?.credential) throw Error('Digital não autorizada.');
   if ((r.retryAt ?? 0) > Date.now()) throw Error('Aguarde 30 segundos.');
-  const { startAuthentication, WebAuthnAbortService } = await import('@simplewebauthn/browser');
+  const { startAuthentication, WebAuthnAbortService } = await prepareBiometric();
   if (signal?.aborted) throw Error('Verificação cancelada.');
   const cancel = () => WebAuthnAbortService.cancelCeremony();
   signal?.addEventListener('abort', cancel, { once: true });

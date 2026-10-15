@@ -23,3 +23,7 @@
 - Capture the native install event once in the root and share it across views; a prompt accepted is not an appinstalled event.
 - The static first-paint shell and React loading state share the existing wallet SVG; generated installed icons derive from that same source.
 - Hide financial content synchronously on pagehide/visibility changes and validate persisted unlock time before foreground paint; the visible expiry timer never renews authentication.
+- Startup minimum visibility is enforced only by the static shell, never by delaying authentication or interface initialization.
+- Android notification badges are transparent monochrome derivatives of the existing wallet SVG, separate from installed app icons; preserve the push transport.
+- Registered biometric unlocks use a preloaded shared browser module and synchronous context checks; real WebAuthn results determine success or PIN fallback, not cached hardware availability.
+- Native opaque lock bars request the registry's black fallback while the document retains each wallpaper; never switch installed display mode or recreate system controls to simulate transparency.
