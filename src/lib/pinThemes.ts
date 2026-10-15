@@ -5,14 +5,17 @@ export type PinTheme = {
   statusBarColor: string; navBarColor: string;
 };
 export const BRAND_BAR_COLOR = '#0F5A3A';
+// Installed Chrome PWAs cannot request transparent native status/navigation bars.
+// Keep the exposed document canvas edge-to-edge; request black for opaque bars.
+export const LOCK_BAR_COLOR = '#000000';
 const lockBackgrounds: Record<string, string> = { classico: 'var(--hero-gradient)', galaxia: 'linear-gradient(var(--pin-system-shade), var(--pin-system-shade)), url("/pin/galaxia.webp")', 'por-do-sol': 'var(--pin-sunset-gradient)' };
 /** Visual values live in global semantic tokens; each registry entry selects a complete token set. */
 export const pinThemes: PinTheme[] = [
-  { id: 'classico', nome: 'Clássico', tipo: 'padrao', token: 'classico', escurecimento: 0, statusBarColor: BRAND_BAR_COLOR, navBarColor: BRAND_BAR_COLOR },
-  { id: 'galaxia', nome: 'Galáxia', tipo: 'wallpaper', token: 'galaxia', fundo: '/pin/galaxia.webp', miniatura: '/pin/galaxia-thumb.webp', escurecimento: 0.3, statusBarColor: '#230d30', navBarColor: '#0d0b1d' },
-  { id: 'por-do-sol', nome: 'Pôr do Sol', tipo: 'neutro', token: 'por-do-sol', escurecimento: 0, statusBarColor: '#FB923C', navBarColor: '#7C3AED' },
+  { id: 'classico', nome: 'Clássico', tipo: 'padrao', token: 'classico', escurecimento: 0, statusBarColor: LOCK_BAR_COLOR, navBarColor: LOCK_BAR_COLOR },
+  { id: 'galaxia', nome: 'Galáxia', tipo: 'wallpaper', token: 'galaxia', fundo: '/pin/galaxia.webp', miniatura: '/pin/galaxia-thumb.webp', escurecimento: 0.3, statusBarColor: LOCK_BAR_COLOR, navBarColor: LOCK_BAR_COLOR },
+  { id: 'por-do-sol', nome: 'Pôr do Sol', tipo: 'neutro', token: 'por-do-sol', escurecimento: 0, statusBarColor: LOCK_BAR_COLOR, navBarColor: LOCK_BAR_COLOR },
 ];
-export const getPinTheme = (id?: string | null): PinTheme => pinThemes.find(t => t.id === id) ?? { id: 'classico', nome: 'Clássico', tipo: 'padrao', token: 'classico', escurecimento: 0, statusBarColor: BRAND_BAR_COLOR, navBarColor: BRAND_BAR_COLOR };
+export const getPinTheme = (id?: string | null): PinTheme => pinThemes.find(t => t.id === id) ?? pinThemes[0] as PinTheme;
 export const themeKey = (userId: string) => `meubolso-pin-tema-${userId}`;
 /** Chaves globais não sensíveis lidas pelo script inline antes do React (só estilo e se o bloqueio está ativo). */
 export const LOCK_GLOBAL_THEME = 'meubolso-lock-estilo';

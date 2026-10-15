@@ -14,8 +14,9 @@ vi.mock('@/components/LockScreen', () => ({ LockScreen: (p: { showPin: boolean; 
 beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); state.available.mockResolvedValue(true); state.bio.mockRejectedValue(Error('cancelled')); state.check.mockResolvedValue(true); state.record.retryAt = 0; state.record.recoveryAllowed = false; Object.defineProperty(document, 'hidden', { configurable: true, value: false }); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const gate = () => render(<SecurityGate><p>Financeiro privado</p></SecurityGate>);
-describe('Three-minute device session', () => {
-  it('expires at exactly three minutes and rejects future/malformed timestamps', () => {
+describe('Five-minute device session', () => {
+  it('uses exactly five minutes and rejects future/malformed timestamps', () => {
+    expect(UNLOCK_SESSION_MS).toBe(300000);
     validateUnlockSession('test-user', 1000);
     expect(hasUnlockSession('test-user', 1000 + UNLOCK_SESSION_MS - 1)).toBe(true);
     expect(hasUnlockSession('test-user', 1000 + UNLOCK_SESSION_MS)).toBe(false);
@@ -34,7 +35,7 @@ describe('Three-minute device session', () => {
     fireEvent(window, new Event('focus'));
     await screen.findByText('PIN'); expect(screen.queryByText('Financeiro privado')).not.toBeInTheDocument();
   });
-  it('hides the private snapshot in background and restores before three minutes without renewal', () => {
+  it('hides the private snapshot in background and restores before five minutes without renewal', () => {
     validateUnlockSession('test-user'); const before = localStorage.getItem('meubolso-desbloqueio-test-user');
     gate(); Object.defineProperty(document, 'hidden', { configurable: true, value: true });
     fireEvent(document, new Event('visibilitychange'));
