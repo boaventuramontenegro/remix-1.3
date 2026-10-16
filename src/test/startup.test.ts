@@ -6,10 +6,10 @@ beforeEach(() => {
   vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
   document.body.innerHTML = '<div id="meubolso-startup"><div id="meubolso-startup-error" hidden></div></div>';
-  delete document.documentElement.dataset.appBooted;
+  delete document.documentElement.dataset['appBooted'];
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); document.body.innerHTML = ''; });
-const ready = async () => { const content = document.createElement('div'); content.dataset.appReady = ''; document.body.appendChild(content); await Promise.resolve(); };
+const ready = async () => { const content = document.createElement('div'); content.dataset['appReady'] = ''; document.body.appendChild(content); await Promise.resolve(); };
 const run = () => new Function(startupScript)();
 
 describe('Startup minimum without delaying app initialization', () => {
