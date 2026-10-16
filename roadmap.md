@@ -1,3 +1,12 @@
+# Current requested adjustments
+- [ ] Clarify weekly and financial-cycle labels without changing calculations
+- [ ] Add monthly series, scoped edits, end date, cancellation and idempotent backend recovery
+- [ ] Configure and verify hourly database automation; test monthly rules with isolated data
+- [ ] Expand category icons/colors and add independent plain PIN key appearance
+- [ ] Set validated unlock expiry to fifteen minutes and verify exact boundary
+- [ ] Inspect lower Android bar fallback; browser visual checks and report native limitations
+- [ ] Run automated tests and check preview build diagnostics
+
 # Final Android adjustments
 - [ ] Increase validated security session to five minutes and test exact expiry/reload/foreground
 - [ ] Keep existing startup screen visible for two seconds minimum and until ready; test error recovery
