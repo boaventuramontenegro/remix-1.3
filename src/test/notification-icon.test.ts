@@ -7,7 +7,7 @@ describe('Notification badge only, preserving delivery and navigation', () => {
   it('uses the dedicated transparent badge without changing the main app icon', async () => {
     const handlers: Record<string, (event: unknown) => void> = {};
     const showNotification = vi.fn().mockResolvedValue(undefined);
-    const worker = readFileSync(new URL('../../public/push-sw.js', import.meta.url), 'utf8');
+    const worker = readFileSync(resolve(__dirname, '../../public/push-sw.js'), 'utf8');
     vm.runInNewContext(worker, { self: { addEventListener: (name: string, handler: (event: unknown) => void) => { handlers[name] = handler; }, registration: { showNotification } } });
     let delivery: Promise<unknown> | undefined;
     handlers['push']?.({ data: { json: () => ({ title: 'Meu Bolso', body: 'Teste', tag: 'teste', url: '/inicio' }) }, waitUntil: (promise: Promise<unknown>) => { delivery = promise; } });
