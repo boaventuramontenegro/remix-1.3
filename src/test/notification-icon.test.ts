@@ -16,7 +16,7 @@ describe('Notification badge only, preserving delivery and navigation', () => {
       body: 'Teste', icon: '/icons/icon-192.png', badge: '/icons/notification-wallet-v1.png', tag: 'teste', data: { url: '/inicio' },
     });
     expect(handlers['notificationclick']).toBeTypeOf('function');
-    const badge = readFileSync(new URL('../../public/icons/notification-wallet-v1.png', import.meta.url));
+    const badge = readFileSync(resolve(__dirname, '../../public/icons/notification-wallet-v1.png'));
     expect(badge.subarray(1, 4).toString()).toBe('PNG');
     expect(badge.readUInt32BE(16)).toBe(96);
     expect(badge.readUInt32BE(20)).toBe(96);
