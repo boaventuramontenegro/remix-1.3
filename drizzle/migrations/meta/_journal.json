@@ -15,6 +15,13 @@
       "when": 1791851282627,
       "tag": "0001_lock_theme",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792110707431,
+      "tag": "0002_monthly_recurrence_series",
+      "breakpoints": true
     }
   ]
 }

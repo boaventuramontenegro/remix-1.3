@@ -174,12 +174,14 @@ export type Database = {
           categoria_id: string | null
           created_at: string
           data: string
+          data_programada: string | null
           descricao: string
           forma_pagamento: string
           id: string
           observacao: string | null
           recorrente: boolean
           recorrente_origem_id: string | null
+          serie_id: string | null
           user_id: string
           valor: number
         }
@@ -187,12 +189,14 @@ export type Database = {
           categoria_id?: string | null
           created_at?: string
           data?: string
+          data_programada?: string | null
           descricao?: string
           forma_pagamento?: string
           id?: string
           observacao?: string | null
           recorrente?: boolean
           recorrente_origem_id?: string | null
+          serie_id?: string | null
           user_id?: string
           valor: number
         }
@@ -200,12 +204,14 @@ export type Database = {
           categoria_id?: string | null
           created_at?: string
           data?: string
+          data_programada?: string | null
           descricao?: string
           forma_pagamento?: string
           id?: string
           observacao?: string | null
           recorrente?: boolean
           recorrente_origem_id?: string | null
+          serie_id?: string | null
           user_id?: string
           valor?: number
         }
@@ -222,6 +228,13 @@ export type Database = {
             columns: ["recorrente_origem_id"]
             isOneToOne: false
             referencedRelation: "gastos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gastos_serie_id_fkey"
+            columns: ["serie_id"]
+            isOneToOne: false
+            referencedRelation: "recorrencias_gastos"
             referencedColumns: ["id"]
           },
         ]
@@ -265,6 +278,56 @@ export type Database = {
         }
         Relationships: []
       }
+      recorrencias_gastos: {
+        Row: {
+          ativa: boolean
+          categoria_id: string | null
+          descricao: string
+          dia: number
+          forma_pagamento: string
+          id: string
+          inicio: string
+          observacao: string | null
+          termino: string | null
+          user_id: string
+          valor: number
+        }
+        Insert: {
+          ativa?: boolean
+          categoria_id?: string | null
+          descricao?: string
+          dia: number
+          forma_pagamento?: string
+          id?: string
+          inicio: string
+          observacao?: string | null
+          termino?: string | null
+          user_id?: string
+          valor: number
+        }
+        Update: {
+          ativa?: boolean
+          categoria_id?: string | null
+          descricao?: string
+          dia?: number
+          forma_pagamento?: string
+          id?: string
+          inicio?: string
+          observacao?: string | null
+          termino?: string | null
+          user_id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recorrencias_gastos_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categorias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sugestoes: {
         Row: {
           criado_em: string
@@ -294,6 +357,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancelar_recorrencia: { Args: { _serie: string }; Returns: undefined }
       excluir_categoria_com_gastos: {
         Args: {
           _categoria: string
@@ -303,7 +367,22 @@ export type Database = {
         Returns: undefined
       }
       excluir_minha_conta: { Args: never; Returns: undefined }
+      gerar_recorrencias: {
+        Args: { _hoje: string; _usuario?: string }
+        Returns: number
+      }
       lancar_recorrentes: { Args: never; Returns: number }
+      processar_recorrencias_agendadas: { Args: never; Returns: number }
+      salvar_gasto_recorrencia: {
+        Args: {
+          _dados: Json
+          _escopo?: string
+          _id?: string
+          _repetir?: boolean
+          _termino?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
