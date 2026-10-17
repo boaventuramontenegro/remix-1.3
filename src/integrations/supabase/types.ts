@@ -278,6 +278,29 @@ export type Database = {
         }
         Relationships: []
       }
+      recorrencias_exclusoes: {
+        Row: {
+          mes: string
+          serie_id: string
+        }
+        Insert: {
+          mes: string
+          serie_id: string
+        }
+        Update: {
+          mes?: string
+          serie_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recorrencias_exclusoes_serie_id_fkey"
+            columns: ["serie_id"]
+            isOneToOne: false
+            referencedRelation: "recorrencias_gastos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recorrencias_gastos: {
         Row: {
           ativa: boolean
