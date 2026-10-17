@@ -42,14 +42,14 @@ export function GastoSheetProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function GastoFormLoader({ gasto, onDone }: { gasto?: Gasto; onDone: () => void }) {
+function GastoFormLoader({ gasto, onDone }: { gasto?: Gasto | undefined; onDone: () => void }) {
   const q = useQuery(recorrenciasQuery);
   if (gasto?.serie_id && q.isPending) return <p className="p-4 text-center">Carregando repetição…</p>;
   if (gasto?.serie_id && q.isError) return <div className="p-4"><p>Não foi possível consultar a repetição.</p><Button onClick={() => void q.refetch()}>Tentar novamente</Button></div>;
   return <GastoForm key={gasto?.id ?? 'novo'} gasto={gasto} serie={q.data?.find(s => s.id === gasto?.serie_id)} onDone={onDone} />;
 }
 
-function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?: import('@/lib/queries').Recorrencia; onDone: () => void }) {
+function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?: import('@/lib/queries').Recorrencia | undefined; onDone: () => void }) {
   const { data: categorias = [] } = useCategorias();
   const salvar = useSalvarGasto();
   const excluir = useExcluirGasto();
