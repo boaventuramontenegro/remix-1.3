@@ -231,6 +231,8 @@ html[data-lock-bars], html[data-lock-bars] body { background-color: var(--system
 .lock-pin { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 28px; }
 .lock-screen .pin-key { height: var(--pin-key-height); border-radius: var(--pin-key-radius); border: 1px solid var(--pin-key-border); background: var(--pin-key-fill); color: var(--pin-text); font-weight: 700; font-size: 28px; backdrop-filter: blur(var(--pin-key-blur)); }
 .lock-screen .pin-key:hover, .lock-screen .pin-key:active { background: var(--pin-white-soft); color: var(--pin-text); box-shadow: var(--pin-key-glow); }
+.lock-screen[data-pin-keys="numeros"] .lock-pin .pin-key { background: transparent; border-color: transparent; backdrop-filter: none; box-shadow: none; }
+.lock-screen[data-pin-keys="numeros"] .lock-pin .pin-key:hover, .lock-screen[data-pin-keys="numeros"] .lock-pin .pin-key:active { background: transparent; box-shadow: none; opacity: .75; }
 .lock-screen .pin-dot { width: var(--pin-dot-size); height: var(--pin-dot-size); border-color: var(--pin-text); box-shadow: var(--pin-dot-shadow); background: transparent; }
 .lock-screen .pin-dot-filled { background: var(--pin-text); }
 .lock-theme-thumb { aspect-ratio: 9/16; width: 100%; border-radius: 12px; background-image: var(--pin-thumbnail, var(--pin-fallback)); background-position: center; background-size: cover; color: var(--pin-text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; overflow: hidden; }

@@ -7,7 +7,7 @@ import { ConfirmSheet } from './ConfirmSheet';
 import { CriarPinSheet, PedirPinSheet } from './PinPad';
 import { LockScreen } from './LockScreen';
 import { biometriaDisponivel, biometricUnlock, checkPin, createPin, enableBiometric, limparSeguranca, readPin, removeBiometric, removePin, setBiometricEnabled } from '@/lib/device-security';
-import { pinThemes, readPinTheme, savePinTheme } from '@/lib/pinThemes';
+import { pinThemes, readPinTheme, savePinTheme, readPinAppearance, savePinAppearance, type PinKeyAppearance } from '@/lib/pinThemes';
 
 export function DeviceSecuritySettings({ userId, themeId, timeout, onTimeout, onTheme }: { userId: string; themeId: string; timeout: number; onTimeout: (v: number) => void; onTheme: (v: string) => void }) {
   const [record, setRecord] = useState<ReturnType<typeof readPin>>(null);
@@ -23,8 +23,9 @@ export function DeviceSecuritySettings({ userId, themeId, timeout, onTimeout, on
   const [selected, setSelected] = useState('classico');
   const [preview, setPreview] = useState<string | null>(null);
   const [demo, setDemo] = useState('');
+  const [appearance, setAppearance] = useState<PinKeyAppearance>('cards');
   const refresh = () => setRecord(readPin(userId));
-  useEffect(() => { refresh(); setSelected(readPinTheme(userId, themeId)); biometriaDisponivel().then(setSupported); }, [userId]);
+  useEffect(() => { refresh(); setSelected(readPinTheme(userId, themeId)); setAppearance(readPinAppearance(userId)); biometriaDisponivel().then(setSupported); }, [userId]);
   const hasPin = !!record?.hash;
   const bioOn = !!record?.credential && record.biometricEnabled !== false;
   const authenticate = async (next: () => void) => {
@@ -61,6 +62,8 @@ export function DeviceSecuritySettings({ userId, themeId, timeout, onTimeout, on
         <div className="flex flex-wrap gap-2">{[4,5,6,7,8].map(n => <Button key={n} variant={record?.length === n ? 'default' : 'outline'} className="rounded-full" disabled={busy} onClick={() => { if (n !== record?.length) void authenticate(() => newPin(n)); }}>{n}</Button>)}</div>
       </> : <Button variant="outline" onClick={() => newPin(record?.length ?? 4)}>Criar PIN</Button>}
       {error && <p role="status" className="text-xs text-destructive">{error}</p>}
+      <p className="text-sm font-medium">Aparência dos números do PIN</p>
+      <div className="flex flex-wrap gap-2">{(['cards', 'numeros'] as const).map(value => <Button key={value} variant={appearance === value ? 'default' : 'outline'} aria-pressed={appearance === value} onClick={() => { savePinAppearance(userId, value); setAppearance(value); }}>{value === 'cards' ? 'Com botões' : 'Só números'}</Button>)}</div>
     </div>
     <div className="space-y-3 py-4">
       <p className="text-sm font-semibold">Estilo da tela de bloqueio</p>
@@ -80,7 +83,7 @@ export function DeviceSecuritySettings({ userId, themeId, timeout, onTimeout, on
     <PedirPinSheet open={verify} onOpenChange={setVerify} tamanho={record?.length ?? 4} onVerificar={async pin => { const ok = await checkPin(userId, pin); if (ok) afterVerify(); refresh(); return ok; }}/>
     <ConfirmSheet open={confirmation !== null} onOpenChange={open => { if (!open) setConfirmation(null); }} title={confirmation === 'reset' ? 'Redefinir bloqueio do app?' : confirmation === 'bio' ? 'Remover digital deste aparelho?' : 'Remover PIN?'} description={confirmation === 'reset' ? 'O PIN e a digital serão removidos deste aparelho. Seu estilo e seus dados continuam.' : confirmation === 'bio' ? 'Para usar a digital novamente, será necessário autorizar este aparelho.' : 'A digital continua ativa, se estiver ligada.'} onConfirm={confirmAction}/>
     {preview && <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="Prévia do estilo">
-      <LockScreen themeId={preview} tamanho={record?.length ?? 4} pin={demo} onPinChange={setDemo} onComplete={() => setTimeout(() => setDemo(''), 400)} showPin showBio preview onBio={() => {}}>
+      <LockScreen themeId={preview} keyAppearance={appearance} tamanho={record?.length ?? 4} pin={demo} onPinChange={setDemo} onComplete={() => setTimeout(() => setDemo(''), 400)} showPin showBio preview onBio={() => {}}>
         <Button className="h-12 w-full" onClick={() => { savePinTheme(userId, preview); setSelected(preview); onTheme(preview); setPreview(null); }}>Usar este estilo</Button>
       </LockScreen>
       <Button variant="ghost" aria-label="Voltar da prévia" className="fixed left-4 top-4 z-[110] size-11 rounded-full text-brand-white hover:bg-brand-white/20 hover:text-brand-white" onClick={() => setPreview(null)}><ArrowLeft/></Button>

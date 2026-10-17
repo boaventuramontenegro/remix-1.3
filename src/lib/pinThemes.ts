@@ -17,6 +17,15 @@ export const pinThemes: PinTheme[] = [
 ];
 export const getPinTheme = (id?: string | null): PinTheme => pinThemes.find(t => t.id === id) ?? pinThemes[0] as PinTheme;
 export const themeKey = (userId: string) => `meubolso-pin-tema-${userId}`;
+export type PinKeyAppearance = 'cards' | 'numeros';
+export const pinAppearanceKey = (userId: string) => `meubolso-pin-teclas-${userId}`;
+export function readPinAppearance(userId: string): PinKeyAppearance {
+  try { return localStorage.getItem(pinAppearanceKey(userId)) === 'numeros' ? 'numeros' : 'cards'; } catch { return 'cards'; }
+}
+export function savePinAppearance(userId: string, appearance: PinKeyAppearance) {
+  localStorage.setItem(pinAppearanceKey(userId), appearance);
+  window.dispatchEvent(new Event('meubolso-pin-tema'));
+}
 /** Chaves globais não sensíveis lidas pelo script inline antes do React (só estilo e se o bloqueio está ativo). */
 export const LOCK_GLOBAL_THEME = 'meubolso-lock-estilo';
 export const LOCK_GLOBAL_ACTIVE = 'meubolso-lock-ativo';

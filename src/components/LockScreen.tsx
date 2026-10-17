@@ -3,10 +3,11 @@ import { Fingerprint } from 'lucide-react';
 import { Logo } from './Logo';
 import { BolinhasPin, TecladoPin } from './PinPad';
 import { Button } from './ui/button';
-import { getPinTheme, applyLockBars, restoreAppBars } from '@/lib/pinThemes';
+import { getPinTheme, applyLockBars, restoreAppBars, type PinKeyAppearance } from '@/lib/pinThemes';
 
 /** Estados: 'bio' (só logo, painel do sistema aberto), 'bio-falhou' (ícone pequeno embaixo), 'pin' (bolinhas + teclado). */
-export function LockScreen({ themeId, tamanho = 4, pin, onPinChange, onComplete, showPin, showBio, bioFailed, onBio, busy, tremor, message, preview, children }: {
+export function LockScreen({ themeId, keyAppearance = 'cards', tamanho = 4, pin, onPinChange, onComplete, showPin, showBio, bioFailed, onBio, busy, tremor, message, preview, children }: {
+  keyAppearance?: PinKeyAppearance;
   themeId: string; tamanho?: number; pin: string; onPinChange: (v: string) => void; onComplete?: (v: string) => void;
   showPin: boolean; showBio: boolean; bioFailed?: boolean; onBio?: () => void; busy?: boolean; tremor?: boolean; message?: string; preview?: boolean; children?: ReactNode;
 }) {
@@ -32,7 +33,7 @@ export function LockScreen({ themeId, tamanho = 4, pin, onPinChange, onComplete,
     return () => { observer.disconnect(); restoreAppBars(); };
   }, [themeId, theme.statusBarColor, preview]);
   const vars = { '--pin-overlay': theme?.escurecimento ?? 0, ...(theme?.fundo && loadedImage === theme.fundo ? { '--pin-wallpaper': `url("${theme.fundo}")` } : {}) } as CSSProperties;
-  return <div className="lock-screen" data-app-ready data-pin-theme={theme?.token} style={vars}>
+  return <div className="lock-screen" data-app-ready data-pin-theme={theme?.token} data-pin-keys={keyAppearance} style={vars}>
     <div className="lock-content">
       <Logo variante="claro" tamanho="lg" className="lock-logo" />
       <div className="lock-body">

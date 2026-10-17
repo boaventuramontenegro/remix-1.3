@@ -6,7 +6,7 @@ import { LockScreen } from './LockScreen';
 import { Button } from './ui/button';
 import { accountQuery, usePreferences } from '@/lib/preferences';
 import { readPin, checkPin, biometricUnlock, canAttemptBiometric, prepareBiometric, limparSeguranca, registerFailure, resetFailures } from '@/lib/device-security';
-import { readPinTheme, setLockGlobals } from '@/lib/pinThemes';
+import { readPinTheme, setLockGlobals, readPinAppearance, type PinKeyAppearance } from '@/lib/pinThemes';
 import { hasUnlockSession, validateUnlockSession, clearUnlockSession, unlockSessionKey } from '@/lib/unlock-session';
 import { supabase } from '@/integrations/supabase/client';
 import { flushSync } from 'react-dom';
@@ -26,6 +26,7 @@ export function SecurityGate({ children }: { children: ReactNode }) {
   const [now, setNow] = useState(Date.now());
   const [version, setVersion] = useState(0);
   const [theme, setTheme] = useState('classico');
+  const [keyAppearance, setKeyAppearance] = useState<PinKeyAppearance>('cards');
   const lockEpoch = useRef(0);
   const lockedRef = useRef(false);
   const bioController = useRef<AbortController | null>(null);
@@ -79,6 +80,7 @@ export function SecurityGate({ children }: { children: ReactNode }) {
       } catch { /* no session means locked on foreground */ }
     };
     const initialize = () => {
+      setKeyAppearance(readPinAppearance(user.id));
       const r = readPin(user.id);
       if (r?.credential && r.biometricEnabled !== false && canAttemptBiometric()) {
         void prepareBiometric().catch(() => { /* Actual attempt reports failure and retains PIN fallback. */ });
@@ -109,7 +111,7 @@ export function SecurityGate({ children }: { children: ReactNode }) {
         lockedRef.current = false; setLocked(false); setLockGlobals(false, readPinTheme(user.id, config.pin_tema));
       }
     };
-    const themeChanged = () => setTheme(readPinTheme(user.id, config.pin_tema));
+    const themeChanged = () => { setTheme(readPinTheme(user.id, config.pin_tema)); setKeyAppearance(readPinAppearance(user.id)); };
     const storage = (e: StorageEvent) => {
       if (e.key === unlockSessionKey(user.id)) {
         if (hasUnlockSession(user.id)) { bioController.current?.abort(); lockedRef.current = false; setLocked(false); setLockGlobals(false, readPinTheme(user.id, config.pin_tema)); }
@@ -207,7 +209,7 @@ export function SecurityGate({ children }: { children: ReactNode }) {
   };
   if (isPending || locked === null) return <LoadingScreen />;
   if (!locked) return <div data-app-ready hidden={suspended}>{children}</div>;
-  return <LockScreen themeId={theme} tamanho={rec?.length ?? 4} pin={pin} onPinChange={setPin} onComplete={unlock} showPin={hasPin && showPin} showBio={hasBio} bioFailed={bioFailed} onBio={() => void tryBio()} busy={busy || cooling} tremor={tremor} message={cooling ? `Aguarde ${remaining} s para tentar novamente.` : message}>
+  return <LockScreen themeId={theme} keyAppearance={keyAppearance} tamanho={rec?.length ?? 4} pin={pin} onPinChange={setPin} onComplete={unlock} showPin={hasPin && showPin} showBio={hasBio} bioFailed={bioFailed} onBio={() => void tryBio()} busy={busy || cooling} tremor={tremor} message={cooling ? `Aguarde ${remaining} s para tentar novamente.` : message}>
     {rec?.recoveryAllowed && !cooling && <Button variant="ghost" className="text-brand-white hover:bg-brand-white/20 hover:text-brand-white text-xs" disabled={busy} onClick={recover}>Entrar com e-mail e senha</Button>}
   </LockScreen>;
 }
