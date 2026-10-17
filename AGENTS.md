@@ -27,3 +27,5 @@
 - Android notification badges are transparent monochrome derivatives of the existing wallet SVG, separate from installed app icons; preserve the push transport.
 - Registered biometric unlocks use a preloaded shared browser module and synchronous context checks; real WebAuthn results determine success or PIN fallback, not cached hardware availability.
 - Native opaque lock bars request the registry's black fallback while the document retains each wallpaper; never switch installed display mode or recreate system controls to simulate transparency.
+- PIN key appearance is a separate per-user device preference, independent of the three wallpaper themes and protection record, so visual changes never renew authentication.
+- Monthly expense writes use the atomic recurrence RPC; scheduled generation and authenticated catch-up share the same database generator to prevent duplicate occurrences.

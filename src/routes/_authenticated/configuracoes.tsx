@@ -140,9 +140,9 @@ function Configuracoes() {
         <div className="py-3"><Seg value={config.tema} options={[["light", "Claro"], ["dark", "Escuro"], ["auto", "Automático"]]} onChange={(v) => { applyTheme(v); set({ tema: v }); }} /></div>
       </Card>
       <Card icon={SlidersHorizontal} title="Preferências" salvo={salvo} collapsible>
-        <Row label="Semana começa"><Seg value={config.semana_inicia} options={[[1, "Segunda"], [0, "Domingo"]]} onChange={(v) => set({ semana_inicia: v })} /></Row>
+        <Row label="Início da semana" desc="Define o primeiro dia dos agrupamentos semanais do aplicativo."><Seg value={config.semana_inicia} options={[[1, "Segunda"], [0, "Domingo"]]} onChange={(v) => set({ semana_inicia: v })} /></Row>
         <button type="button" onClick={() => setSheetDia(true)} className="flex w-full items-center justify-between gap-3 py-3 text-left">
-          <div><p className="text-sm font-medium">Mês começa no dia</p><p className="text-xs text-muted-foreground">Seu mês financeiro</p></div>
+          <div><p className="text-sm font-medium">Seu mês financeiro</p><p className="text-xs text-muted-foreground">Dia em que começa seu ciclo de gastos, relatórios e orçamentos</p></div>
           <span className="flex items-center gap-1 text-sm font-semibold text-primary">Dia {config.dia_inicio_mes}<ChevronRight size={16} /></span>
         </button>
         <div className="py-3"><p className="mb-2 text-sm font-medium">Pagamento padrão</p><div className="flex flex-wrap gap-2">{FORMAS_PAGAMENTO.map((f) => (
@@ -172,7 +172,8 @@ function Configuracoes() {
         <div className="grid grid-cols-2 gap-4"><div><p className="mb-2 text-sm font-medium">Hora</p><div className="grid max-h-60 grid-cols-3 gap-1 overflow-y-auto">{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(h=><Button key={h} variant={hora===h?'default':'outline'} onClick={()=>setHora(h)}>{h}</Button>)}</div></div><div><p className="mb-2 text-sm font-medium">Minuto</p><div className="grid max-h-60 grid-cols-3 gap-1 overflow-y-auto">{Array.from({length:60},(_,i)=>String(i).padStart(2,'0')).map(m=><Button key={m} variant={minuto===m?'default':'outline'} onClick={()=>setMinuto(m)}>{m}</Button>)}</div></div></div>
         <Button className="mt-4 h-12 w-full" onClick={()=>{if(horarioSheet)set({[`lembrete_${horarioSheet}_horario`]:`${hora}:${minuto}`, fuso_horario:Intl.DateTimeFormat().resolvedOptions().timeZone});setHorarioSheet(null);}}>Salvar horário</Button>
       </BottomSheet>
-      <BottomSheet open={sheetDia} onOpenChange={setSheetDia} title="Mês começa no dia" description="Escolha o dia em que seu mês financeiro começa.">
+      <BottomSheet open={sheetDia} onOpenChange={setSheetDia} title="Seu mês financeiro" description="Escolha o dia do mês em que começa seu ciclo de gastos, relatórios e orçamentos. Não precisa ser o dia do salário nem o dia em que começou a usar o app.">
+        <p className="mb-4 text-sm text-muted-foreground">Exemplo: começando no dia 10, o ciclo vai de 10 de outubro a 9 de novembro. Em 10 de novembro começa o próximo ciclo.</p>
         <div className="grid grid-cols-7 gap-2 pb-2">
           {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
             <button

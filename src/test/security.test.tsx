@@ -14,9 +14,9 @@ vi.mock('@/components/LockScreen', () => ({ LockScreen: (p: { showPin: boolean; 
 beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); state.available.mockReturnValue(true); state.bio.mockRejectedValue(Error('cancelled')); state.check.mockResolvedValue(true); state.record.retryAt = 0; state.record.recoveryAllowed = false; Object.defineProperty(document, 'hidden', { configurable: true, value: false }); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const gate = () => render(<SecurityGate><p>Financeiro privado</p></SecurityGate>);
-describe('Five-minute device session', () => {
-  it('uses exactly five minutes and rejects future/malformed timestamps', () => {
-    expect(UNLOCK_SESSION_MS).toBe(300000);
+describe('Fifteen-minute device session', () => {
+  it('uses exactly fifteen minutes and rejects future/malformed timestamps', () => {
+    expect(UNLOCK_SESSION_MS).toBe(900000);
     validateUnlockSession('test-user', 1000);
     expect(hasUnlockSession('test-user', 1000 + UNLOCK_SESSION_MS - 1)).toBe(true);
     expect(hasUnlockSession('test-user', 1000 + UNLOCK_SESSION_MS)).toBe(false);
@@ -35,7 +35,7 @@ describe('Five-minute device session', () => {
     fireEvent(window, new Event('focus'));
     await screen.findByText('PIN'); expect(screen.queryByText('Financeiro privado')).not.toBeInTheDocument();
   });
-  it('hides the private snapshot in background and restores before five minutes without renewal', () => {
+  it('hides the private snapshot in background and restores before fifteen minutes without renewal', () => {
     validateUnlockSession('test-user'); const before = localStorage.getItem('meubolso-desbloqueio-test-user');
     gate(); Object.defineProperty(document, 'hidden', { configurable: true, value: true });
     fireEvent(document, new Event('visibilitychange'));
@@ -56,7 +56,7 @@ describe('Five-minute device session', () => {
     validateUnlockSession('test-user', Date.now() - UNLOCK_SESSION_MS);
     gate(); expect(screen.queryByText('Financeiro privado')).not.toBeInTheDocument();
   });
-  it.each([299999, 300000, 300001])('checks background return after %i ms without extending the original timestamp', elapsed => {
+  it.each([899999, 900000, 900001])('checks background return after %i ms without extending the original timestamp', elapsed => {
     vi.useFakeTimers(); validateUnlockSession('test-user');
     const original = localStorage.getItem('meubolso-desbloqueio-test-user');
     gate(); Object.defineProperty(document, 'hidden', { configurable: true, value: true });
@@ -64,7 +64,7 @@ describe('Five-minute device session', () => {
     act(() => vi.advanceTimersByTime(elapsed));
     Object.defineProperty(document, 'hidden', { configurable: true, value: false });
     fireEvent(document, new Event('visibilitychange'));
-    if (elapsed < 300000) {
+    if (elapsed < 900000) {
       expect(screen.getByText('Financeiro privado')).toBeVisible();
       expect(localStorage.getItem('meubolso-desbloqueio-test-user')).toBe(original);
     } else expect(screen.queryByText('Financeiro privado')).not.toBeInTheDocument();
