@@ -1,6 +1,6 @@
 import { readPin } from './device-security';
 
-export const UNLOCK_SESSION_MS = 5 * 60 * 1000;
+export const UNLOCK_SESSION_MS = 15 * 60 * 1000;
 export const unlockSessionKey = (userId: string) => `meubolso-desbloqueio-${userId}`;
 const protection = (userId: string) => {
   const r = readPin(userId);
