@@ -6,6 +6,12 @@ export type Categoria = Database["public"]["Tables"]["categorias"]["Row"];
 export type Gasto = Database["public"]["Tables"]["gastos"]["Row"];
 export type GastoInsert = Database["public"]["Tables"]["gastos"]["Insert"];
 export type CategoriaInsert = Database["public"]["Tables"]["categorias"]["Insert"];
+export type Recorrencia = Database['public']['Tables']['recorrencias_gastos']['Row'];
+export const recorrenciasQuery = queryOptions({ queryKey: ['recorrencias'], queryFn: async () => {
+  const { data, error } = await supabase.from('recorrencias_gastos').select('*');
+  if (error) throw error;
+  return data;
+} });
 
 export const CATEGORIAS_PADRAO = [
   { nome: "Contas", icone: "receipt", cor: "#0ea5e9" },
@@ -81,15 +87,26 @@ export const useCategorias = () => useQuery(categoriasQuery);
 export function useSalvarGasto() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...g }: GastoInsert & { id?: string }) => {
-      const { error } = id
-        ? await supabase.from("gastos").update(g).eq("id", id)
-        : await supabase.from("gastos").insert(g);
+    mutationFn: async ({ id, escopo = 'este', termino, ...g }: GastoInsert & { id?: string; escopo?: 'este' | 'proximos'; termino?: string | null }) => {
+      const { error } = await supabase.rpc('salvar_gasto_recorrencia', {
+        _dados: { valor: g.valor, categoria_id: g.categoria_id ?? null, data: g.data, descricao: g.descricao ?? '', forma_pagamento: g.forma_pagamento ?? 'pix', observacao: g.observacao ?? null },
+        ...(id ? { _id: id } : {}), _escopo: escopo, _repetir: g.recorrente ?? false,
+        ...(termino ? { _termino: termino } : {}),
+      });
       if (error) throw error;
-      if (g.recorrente) await supabase.rpc("lancar_recorrentes");
+      const recovery = await supabase.rpc('lancar_recorrentes');
+      if (recovery.error) console.error('Falha na recuperação de recorrências');
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["gastos"] }),
+    onSuccess: async () => { await Promise.all([qc.invalidateQueries({ queryKey: ['gastos'] }), qc.invalidateQueries({ queryKey: ['recorrencias'] })]); },
   });
+}
+
+export function useCancelarRecorrencia() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: async (id: string) => {
+    const { error } = await supabase.rpc('cancelar_recorrencia', { _serie: id });
+    if (error) throw error;
+  }, onSuccess: () => qc.invalidateQueries({ queryKey: ['recorrencias'] }) });
 }
 
 export function useExcluirGasto() {
