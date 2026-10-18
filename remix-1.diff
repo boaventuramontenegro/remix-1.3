@@ -1,0 +1,924 @@
+From f4cf3ed6e6a8f9117ef3d3f04e3c2b1b0061a391 Mon Sep 17 00:00:00 2001
+From: boaventuramontenegro
+ <3.04119358e+08+boaventuramontenegro@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 23:05:54 +0000
+Subject: [PATCH 1/2] feat: add financial foundation and pending payments
+
+---
+ src/integrations/supabase/types.ts            | 51 +++++++++++
+ src/lib/pagamentos.ts                         | 49 +++++++++++
+ src/lib/recorrencia.ts                        | 47 ++++++++--
+ src/routes/_authenticated/gastos.tsx          | 10 +++
+ src/test/pagamentos.test.ts                   | 53 ++++++++++++
+ src/test/recorrencia.test.ts                  | 33 +++++++
+ ...017200000_financial_foundation_phase_1.sql | 85 +++++++++++++++++++
+ 7 files changed, 320 insertions(+), 8 deletions(-)
+ create mode 100644 src/lib/pagamentos.ts
+ create mode 100644 src/test/pagamentos.test.ts
+ create mode 100644 src/test/recorrencia.test.ts
+ create mode 100644 supabase/migrations/20261017200000_financial_foundation_phase_1.sql
+
+diff --git a/src/integrations/supabase/types.ts b/src/integrations/supabase/types.ts
+index 12de222..c10bc56 100644
+--- a/src/integrations/supabase/types.ts
++++ b/src/integrations/supabase/types.ts
+@@ -175,13 +175,16 @@ export type Database = {
+           created_at: string
+           data: string
+           data_programada: string | null
++          data_pagamento: string | null
+           descricao: string
+           forma_pagamento: string
++          gerado_automaticamente: boolean
+           id: string
+           observacao: string | null
+           recorrente: boolean
+           recorrente_origem_id: string | null
+           serie_id: string | null
++          status_pagamento: string
+           user_id: string
+           valor: number
+         }
+@@ -190,13 +193,16 @@ export type Database = {
+           created_at?: string
+           data?: string
+           data_programada?: string | null
++          data_pagamento?: string | null
+           descricao?: string
+           forma_pagamento?: string
++          gerado_automaticamente?: boolean
+           id?: string
+           observacao?: string | null
+           recorrente?: boolean
+           recorrente_origem_id?: string | null
+           serie_id?: string | null
++          status_pagamento?: string
+           user_id?: string
+           valor: number
+         }
+@@ -205,13 +211,16 @@ export type Database = {
+           created_at?: string
+           data?: string
+           data_programada?: string | null
++          data_pagamento?: string | null
+           descricao?: string
+           forma_pagamento?: string
++          gerado_automaticamente?: boolean
+           id?: string
+           observacao?: string | null
+           recorrente?: boolean
+           recorrente_origem_id?: string | null
+           serie_id?: string | null
++          status_pagamento?: string
+           user_id?: string
+           valor?: number
+         }
+@@ -278,6 +287,45 @@ export type Database = {
+         }
+         Relationships: []
+       }
++      recorrencias_ocorrencias: {
++        Row: {
++          criado_em: string
++          data_programada: string
++          gasto_id: string | null
++          id: string
++          serie_id: string
++        }
++        Insert: {
++          criado_em?: string
++          data_programada: string
++          gasto_id?: string | null
++          id?: string
++          serie_id: string
++        }
++        Update: {
++          criado_em?: string
++          data_programada?: string
++          gasto_id?: string | null
++          id?: string
++          serie_id?: string
++        }
++        Relationships: [
++          {
++            foreignKeyName: "recorrencias_ocorrencias_gasto_id_fkey"
++            columns: ["gasto_id"]
++            isOneToOne: false
++            referencedRelation: "gastos"
++            referencedColumns: ["id"]
++          },
++          {
++            foreignKeyName: "recorrencias_ocorrencias_serie_id_fkey"
++            columns: ["serie_id"]
++            isOneToOne: false
++            referencedRelation: "recorrencias_gastos"
++            referencedColumns: ["id"]
++          },
++        ]
++      }
+       recorrencias_exclusoes: {
+         Row: {
+           mes: string
+@@ -311,6 +359,7 @@ export type Database = {
+           id: string
+           inicio: string
+           observacao: string | null
++          regra_dia_invalido: string
+           termino: string | null
+           user_id: string
+           valor: number
+@@ -324,6 +373,7 @@ export type Database = {
+           id?: string
+           inicio: string
+           observacao?: string | null
++          regra_dia_invalido?: string
+           termino?: string | null
+           user_id?: string
+           valor: number
+@@ -337,6 +387,7 @@ export type Database = {
+           id?: string
+           inicio?: string
+           observacao?: string | null
++          regra_dia_invalido?: string
+           termino?: string | null
+           user_id?: string
+           valor?: number
+diff --git a/src/lib/pagamentos.ts b/src/lib/pagamentos.ts
+new file mode 100644
+index 0000000..851880b
+--- /dev/null
++++ b/src/lib/pagamentos.ts
+@@ -0,0 +1,49 @@
++import type { Gasto } from "./queries";
++
++export const STATUS_PAGAMENTO = [
++  "futuro",
++  "a_vencer",
++  "vence_hoje",
++  "pendente",
++  "atrasado",
++  "pago",
++  "cancelado",
++] as const;
++
++export type StatusPagamento = (typeof STATUS_PAGAMENTO)[number];
++export type StatusPendente = "atrasado" | "vence_hoje" | "a_vencer";
++
++const ordem: Record<StatusPendente, number> = {
++  atrasado: 0,
++  vence_hoje: 1,
++  a_vencer: 2,
++};
++
++function statusExplicito(gasto: Gasto): StatusPagamento | null {
++  const status = gasto.status_pagamento;
++  return STATUS_PAGAMENTO.includes(status as StatusPagamento) ? (status as StatusPagamento) : null;
++}
++
++/** Deriva o estado visível da data sem transformar ausência de resposta em pagamento. */
++export function statusVisivel(gasto: Gasto, hoje: string): StatusPagamento | null {
++  const explicito = statusExplicito(gasto);
++  if (explicito === "pago" || explicito === "cancelado") return explicito;
++  if (!explicito) return null;
++  if (gasto.data < hoje) return "atrasado";
++  if (gasto.data === hoje) return "vence_hoje";
++  return "a_vencer";
++}
++
++/**
++ * Ordena somente compromissos ainda não pagos/cancelados:
++ * atrasados, vencendo hoje e próximos vencimentos.
++ */
++export function ordenarPagamentosPendentes(gastos: Gasto[], hoje: string) {
++  return gastos
++    .map((gasto) => ({ gasto, status: statusVisivel(gasto, hoje) }))
++    .filter((item): item is { gasto: Gasto; status: StatusPendente } =>
++      item.status === "atrasado" || item.status === "vence_hoje" || item.status === "a_vencer",
++    )
++    .sort((a, b) => ordem[a.status] - ordem[b.status] || a.gasto.data.localeCompare(b.gasto.data) || a.gasto.created_at.localeCompare(b.gasto.created_at))
++    .map(({ gasto }) => gasto);
++}
+diff --git a/src/lib/recorrencia.ts b/src/lib/recorrencia.ts
+index 9b480a7..81417e4 100644
+--- a/src/lib/recorrencia.ts
++++ b/src/lib/recorrencia.ts
+@@ -1,8 +1,39 @@
+-import { addMonths, endOfMonth, setDate, startOfMonth } from 'date-fns';
+-import { fromISODate, toISODate } from './format';
+-
+-/** Next planned month keeps the series' original day, including after February. */
+-export function proximaRecorrencia(programada: string, dia: number) {
+-  const month = startOfMonth(addMonths(fromISODate(programada), 1));
+-  return toISODate(setDate(month, Math.min(dia, endOfMonth(month).getDate())));
+-}
+\ No newline at end of file
++import { addMonths, endOfMonth, setDate, startOfMonth } from "date-fns";
++import { fromISODate, toISODate } from "./format";
++
++export type RegraDiaInvalido = "ultimo_dia" | "pular_mes";
++
++/**
++ * Calcula uma ocorrência mensal sem confundir data prevista com data de criação.
++ *
++ * Para uma recorrência no dia 31, a regra é persistida na série:
++ * - ultimo_dia: usa o último dia real do mês;
++ * - pular_mes: não cria ocorrência no mês sem o dia 31.
++ */
++export function dataRecorrenciaMensal(
++  programada: string,
++  dia: number,
++  regraDiaInvalido: RegraDiaInvalido = "ultimo_dia",
++  meses = 1,
++): string | null {
++  if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
++    throw new Error("O dia da recorrência deve estar entre 1 e 31.");
++  }
++  if (!Number.isInteger(meses) || meses < 1) {
++    throw new Error("A quantidade de meses deve ser um inteiro positivo.");
++  }
++
++  const month = startOfMonth(addMonths(fromISODate(programada), meses));
++  const ultimoDia = endOfMonth(month).getDate();
++  if (dia > ultimoDia && regraDiaInvalido === "pular_mes") return null;
++  return toISODate(setDate(month, Math.min(dia, ultimoDia)));
++}
++
++/** Compatibilidade com os chamadores existentes: meses curtos usam o último dia. */
++export function proximaRecorrencia(
++  programada: string,
++  dia: number,
++  regraDiaInvalido: RegraDiaInvalido = "ultimo_dia",
++) {
++  return dataRecorrenciaMensal(programada, dia, regraDiaInvalido) ?? programada;
++}
+diff --git a/src/routes/_authenticated/gastos.tsx b/src/routes/_authenticated/gastos.tsx
+index b670c5f..3c029b7 100644
+--- a/src/routes/_authenticated/gastos.tsx
++++ b/src/routes/_authenticated/gastos.tsx
+@@ -6,6 +6,8 @@ import { ChevronLeft, ChevronRight, Receipt, Search } from "lucide-react";
+ import { categoriasQuery, gastosTodosQuery } from "@/lib/queries";
+ import { usePreferences } from "@/lib/preferences";
+ import { formatBRL, labelPeriodo, rangeOf, shift, toISODate } from "@/lib/format";
++import { dataSaoPaulo } from "@/lib/media";
++import { ordenarPagamentosPendentes } from "@/lib/pagamentos";
+ import { pageMeta } from "@/lib/page-meta";
+ import { Button } from "@/components/ui/button";
+ import { Input } from "@/components/ui/input";
+@@ -35,10 +37,18 @@ function GastosPage() {useValoresOcultos();
+       (!q || g.descricao.toLowerCase().includes(q) || (g.observacao ?? "").toLowerCase().includes(q)),
+     );
+   }, [all, range.start.getTime(), busca, cat]);
++  const pendentes = useMemo(() => ordenarPagamentosPendentes(all, toISODate(dataSaoPaulo())), [all]);
+   const total = lista.reduce((s, g) => s + Number(g.valor), 0);
+ 
+   return (
+     <div className="space-y-4">
++      {pendentes.length > 0 && <section className="surface space-y-3" aria-labelledby="pagamentos-pendentes-titulo">
++        <div>
++          <h2 id="pagamentos-pendentes-titulo" className="font-semibold">Pagamentos pendentes</h2>
++          <p className="text-xs text-muted-foreground">Atrasados, vencendo hoje e próximos vencimentos.</p>
++        </div>
++        <ExpenseList gastos={pendentes} categorias={cats} />
++      </section>}
+       <div className="flex items-center justify-between">
+         <Button variant="ghost" size="icon" aria-label="Mês anterior" onClick={() => setAnchor(shift("mes", anchor, -1))}><ChevronLeft /></Button>
+         <h2 className="text-sm font-semibold">{labelPeriodo("mes", anchor)}</h2>
+diff --git a/src/test/pagamentos.test.ts b/src/test/pagamentos.test.ts
+new file mode 100644
+index 0000000..8eef3ff
+--- /dev/null
++++ b/src/test/pagamentos.test.ts
+@@ -0,0 +1,53 @@
++import { describe, expect, it } from "vitest";
++import { ordenarPagamentosPendentes, statusVisivel } from "@/lib/pagamentos";
++import type { Gasto } from "@/lib/queries";
++
++const gasto = (id: string, data: string, status_pagamento: Gasto["status_pagamento"]): Gasto => ({
++  id,
++  user_id: "user",
++  categoria_id: null,
++  created_at: `${data}T10:00:00Z`,
++  data,
++  data_programada: data,
++  data_pagamento: null,
++  descricao: id,
++  forma_pagamento: "pix",
++  gerado_automaticamente: false,
++  observacao: null,
++  recorrente: false,
++  recorrente_origem_id: null,
++  serie_id: null,
++  status_pagamento,
++  valor: 100,
++});
++
++describe("pagamentos pendentes", () => {
++  it("deriva atrasado, hoje e próximo a partir da data prevista", () => {
++    expect(statusVisivel(gasto("a", "2026-10-16", "pendente"), "2026-10-17")).toBe("atrasado");
++    expect(statusVisivel(gasto("b", "2026-10-17", "pendente"), "2026-10-17")).toBe("vence_hoje");
++    expect(statusVisivel(gasto("c", "2026-10-18", "pendente"), "2026-10-17")).toBe("a_vencer");
++  });
++
++  it("ordena atrasados, hoje e próximos, e datas crescentes dentro de cada grupo", () => {
++    const itens = [
++      gasto("proximo-2", "2026-10-20", "pendente"),
++      gasto("atrasado-2", "2026-10-15", "pendente"),
++      gasto("hoje", "2026-10-17", "pendente"),
++      gasto("atrasado-1", "2026-10-10", "pendente"),
++      gasto("proximo-1", "2026-10-18", "pendente"),
++      gasto("pago", "2026-10-01", "pago"),
++    ];
++    expect(ordenarPagamentosPendentes(itens, "2026-10-17").map((item) => item.id)).toEqual([
++      "atrasado-1",
++      "atrasado-2",
++      "hoje",
++      "proximo-1",
++      "proximo-2",
++    ]);
++  });
++
++  it("não inclui pagos, cancelados nem registros antigos sem status financeiro", () => {
++    const antigo = { ...gasto("antigo", "2026-10-10", "pago"), status_pagamento: "desconhecido" } as Gasto;
++    expect(ordenarPagamentosPendentes([gasto("pago", "2026-10-10", "pago"), gasto("cancelado", "2026-10-10", "cancelado"), antigo], "2026-10-17")).toEqual([]);
++  });
++});
+diff --git a/src/test/recorrencia.test.ts b/src/test/recorrencia.test.ts
+new file mode 100644
+index 0000000..9087879
+--- /dev/null
++++ b/src/test/recorrencia.test.ts
+@@ -0,0 +1,33 @@
++import { describe, expect, it } from "vitest";
++import { dataRecorrenciaMensal, proximaRecorrencia } from "@/lib/recorrencia";
++
++describe("recorrência mensal", () => {
++  it("mantém o dia original quando ele existe no mês seguinte", () => {
++    expect(dataRecorrenciaMensal("2026-10-10", 10)).toBe("2026-11-10");
++  });
++
++  it("usa o último dia em fevereiro, inclusive em ano bissexto", () => {
++    expect(dataRecorrenciaMensal("2025-01-31", 31, "ultimo_dia")).toBe("2025-02-28");
++    expect(dataRecorrenciaMensal("2024-01-31", 31, "ultimo_dia")).toBe("2024-02-29");
++  });
++
++  it("usa o último dia em meses de 30 dias e retoma o dia 31 depois", () => {
++    expect(dataRecorrenciaMensal("2026-03-31", 31, "ultimo_dia")).toBe("2026-04-30");
++    expect(dataRecorrenciaMensal("2026-04-30", 31, "ultimo_dia")).toBe("2026-05-31");
++  });
++
++  it("pula somente o mês sem dia 31 quando essa regra foi escolhida", () => {
++    expect(dataRecorrenciaMensal("2026-01-31", 31, "pular_mes")).toBeNull();
++    expect(dataRecorrenciaMensal("2026-01-31", 31, "pular_mes", 2)).toBe("2026-03-31");
++  });
++
++  it("preserva a API antiga para os chamadores atuais", () => {
++    expect(proximaRecorrencia("2026-01-31", 31)).toBe("2026-02-28");
++  });
++
++  it("rejeita dias e intervalos inválidos", () => {
++    expect(() => dataRecorrenciaMensal("2026-01-01", 0)).toThrow();
++    expect(() => dataRecorrenciaMensal("2026-01-01", 32)).toThrow();
++    expect(() => dataRecorrenciaMensal("2026-01-01", 1, "ultimo_dia", 0)).toThrow();
++  });
++});
+diff --git a/supabase/migrations/20261017200000_financial_foundation_phase_1.sql b/supabase/migrations/20261017200000_financial_foundation_phase_1.sql
+new file mode 100644
+index 0000000..20ea00f
+--- /dev/null
++++ b/supabase/migrations/20261017200000_financial_foundation_phase_1.sql
+@@ -0,0 +1,85 @@
++-- Fundação financeira da fase 1.
++-- Esta migração é exclusivamente aditiva: não remove colunas, registros ou funções existentes.
++
++alter table public.gastos
++  add column if not exists status_pagamento text,
++  add column if not exists data_pagamento date,
++  add column if not exists gerado_automaticamente boolean not null default false;
++
++-- O histórico já existente não deve ser reinterpretado como pendente.
++update public.gastos
++set status_pagamento = 'pago'
++where status_pagamento is null;
++
++alter table public.gastos
++  alter column status_pagamento set default 'pendente',
++  alter column status_pagamento set not null;
++
++alter table public.gastos
++  drop constraint if exists gastos_status_pagamento_check;
++
++alter table public.gastos
++  add constraint gastos_status_pagamento_check
++  check (status_pagamento in ('futuro', 'a_vencer', 'vence_hoje', 'pendente', 'atrasado', 'pago', 'cancelado'));
++
++alter table public.recorrencias_gastos
++  add column if not exists regra_dia_invalido text not null default 'ultimo_dia';
++
++alter table public.recorrencias_gastos
++  drop constraint if exists recorrencias_gastos_regra_dia_invalido_check;
++
++alter table public.recorrencias_gastos
++  add constraint recorrencias_gastos_regra_dia_invalido_check
++  check (regra_dia_invalido in ('ultimo_dia', 'pular_mes'));
++
++-- Registro de chaves de ocorrência para que a futura geração seja idempotente
++-- mesmo quando houver duas execuções simultâneas ou repetidas.
++create table if not exists public.recorrencias_ocorrencias (
++  id uuid primary key default gen_random_uuid(),
++  serie_id uuid not null references public.recorrencias_gastos(id) on delete cascade,
++  gasto_id uuid references public.gastos(id) on delete set null,
++  data_programada date not null,
++  criado_em timestamptz not null default now(),
++  unique (serie_id, data_programada)
++);
++
++alter table public.recorrencias_ocorrencias enable row level security;
++
++drop policy if exists "Usuário vê suas ocorrências de recorrência" on public.recorrencias_ocorrencias;
++create policy "Usuário vê suas ocorrências de recorrência"
++  on public.recorrencias_ocorrencias for select
++  using (exists (
++    select 1 from public.recorrencias_gastos r
++    where r.id = serie_id and r.user_id = auth.uid()
++  ));
++
++drop policy if exists "Usuário insere suas ocorrências de recorrência" on public.recorrencias_ocorrencias;
++create policy "Usuário insere suas ocorrências de recorrência"
++  on public.recorrencias_ocorrencias for insert
++  with check (exists (
++    select 1 from public.recorrencias_gastos r
++    where r.id = serie_id and r.user_id = auth.uid()
++  ));
++
++drop policy if exists "Usuário atualiza suas ocorrências de recorrência" on public.recorrencias_ocorrencias;
++create policy "Usuário atualiza suas ocorrências de recorrência"
++  on public.recorrencias_ocorrencias for update
++  using (exists (
++    select 1 from public.recorrencias_gastos r
++    where r.id = serie_id and r.user_id = auth.uid()
++  ));
++
++create index if not exists recorrencias_ocorrencias_gasto_id_idx
++  on public.recorrencias_ocorrencias (gasto_id);
++
++create index if not exists gastos_status_pagamento_data_idx
++  on public.gastos (user_id, status_pagamento, data);
++
++comment on column public.gastos.status_pagamento is
++  'Estado explícito do pagamento; ausência de confirmação não deve ser tratada como pago.';
++comment on column public.gastos.data_pagamento is
++  'Data em que o usuário confirmou o pagamento, distinta da data prevista.';
++comment on column public.gastos.gerado_automaticamente is
++  'Indica ocorrência gerada por uma recorrência, sem apagar histórico confirmado.';
++comment on column public.recorrencias_gastos.regra_dia_invalido is
++  'Tratamento do dia 31 em meses sem esse dia: ultimo_dia ou pular_mes.';
+-- 
+2.43.0
+
+
+From c2e242b49ed0841764cbbca2b4dc8005151c8add Mon Sep 17 00:00:00 2001
+From: boaventuramontenegro
+ <3.04119358e+08+boaventuramontenegro@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 23:40:00 +0000
+Subject: [PATCH 2/2] feat: complete financial and pwa scope
+
+---
+ public/manifest.webmanifest                   |  4 +-
+ public/push-sw.js                             | 10 ++-
+ src/components/GastoSheet.tsx                 | 29 +++++++--
+ src/integrations/supabase/types.ts            | 10 +++
+ src/lib/compromissos.ts                       | 43 +++++++++++++
+ src/lib/queries.ts                            | 18 +++++-
+ src/routes/__root.tsx                         |  2 +-
+ src/test/compromissos.test.ts                 | 25 ++++++++
+ src/test/notification-icon.test.ts            |  4 +-
+ src/test/pagamentos.test.ts                   |  4 ++
+ ...017200000_financial_foundation_phase_1.sql | 62 +++++++++++++++++++
+ 11 files changed, 198 insertions(+), 13 deletions(-)
+ create mode 100644 src/lib/compromissos.ts
+ create mode 100644 src/test/compromissos.test.ts
+
+diff --git a/public/manifest.webmanifest b/public/manifest.webmanifest
+index 36af05a..d065294 100644
+--- a/public/manifest.webmanifest
++++ b/public/manifest.webmanifest
+@@ -8,8 +8,8 @@
+   "scope": "/",
+   "display": "standalone",
+   "orientation": "portrait",
+-  "background_color": "#1F8A5B",
+-  "theme_color": "#0F5A3A",
++  "background_color": "#000000",
++  "theme_color": "#000000",
+   "icons": [
+     { "src": "/icons/icon-192.png?v=wallet-solid", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+     { "src": "/icons/icon-512.png?v=wallet-solid", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+diff --git a/public/push-sw.js b/public/push-sw.js
+index b4cf8f3..21eada5 100644
+--- a/public/push-sw.js
++++ b/public/push-sw.js
+@@ -9,14 +9,20 @@ self.addEventListener("push", (event) => {
+       // Android's small icon uses only alpha: no opaque app-icon background.
+       badge: "/icons/notification-wallet-v1.png",
+       tag: d.tag,
+-      data: { url: d.url || "/inicio" },
++      actions: Array.isArray(d.actions) ? d.actions : [],
++      data: { url: d.url || "/inicio", occurrenceId: d.occurrenceId || null },
+     }),
+   );
+ });
+ 
+ self.addEventListener("notificationclick", (event) => {
+   event.notification.close();
+-  const url = (event.notification.data && event.notification.data.url) || "/inicio";
++  const data = event.notification.data || {};
++  let url = data.url || "/inicio";
++  if (event.action && data.occurrenceId) {
++    const separator = url.includes("?") ? "&" : "?";
++    url = `${url}${separator}notificacao=${encodeURIComponent(event.action)}&ocorrencia=${encodeURIComponent(data.occurrenceId)}`;
++  }
+   event.waitUntil(
+     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+       for (const c of list) {
+diff --git a/src/components/GastoSheet.tsx b/src/components/GastoSheet.tsx
+index 13b5c52..f225a5b 100644
+--- a/src/components/GastoSheet.tsx
++++ b/src/components/GastoSheet.tsx
+@@ -12,9 +12,9 @@ import { Switch } from "@/components/ui/switch";
+ import { Textarea } from "@/components/ui/textarea";
+ import { CategoriaIcone } from "@/lib/icons";
+ import { FORMAS_PAGAMENTO, formatBRL, toISODate, displayDate } from "@/lib/format";
+-import { proximaRecorrencia } from '@/lib/recorrencia';
++import { proximaRecorrencia, type RegraDiaInvalido } from '@/lib/recorrencia';
+ import { usePreferences } from "@/lib/preferences";
+-import { gastosTodosQuery, recorrenciasQuery, useCancelarRecorrencia, useCategorias, useExcluirGasto, useSalvarGasto, type Gasto } from "@/lib/queries";
++import { gastosTodosQuery, recorrenciasQuery, useAtualizarStatusPagamento, useCancelarRecorrencia, useCategorias, useExcluirGasto, useSalvarGasto, type Gasto } from "@/lib/queries";
+ 
+ type Ctx = { abrir: (g?: Gasto) => void };
+ const GastoCtx = createContext<Ctx>({ abrir: () => {} });
+@@ -63,9 +63,12 @@ function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?
+   const [escopo, setEscopo] = useState<'este' | 'proximos'>('este');
+   const [termino, setTermino] = useState(serie?.termino ?? '');
+   const [comTermino, setComTermino] = useState(!!serie?.termino);
++  const [regraDia31, setRegraDia31] = useState<RegraDiaInvalido>(serie?.regra_dia_invalido === "pular_mes" ? "pular_mes" : "ultimo_dia");
+   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false);
+   const cancelar = useCancelarRecorrencia();
+-  const proxima = proximaRecorrencia(gasto?.data_programada ?? data, serie?.dia ?? Number(data.slice(8, 10)));
++  const atualizarPagamento = useAtualizarStatusPagamento();
++  const diaRecorrencia = serie?.dia ?? Number(data.slice(8, 10));
++  const proxima = proximaRecorrencia(gasto?.data_programada ?? data, diaRecorrencia, regraDia31);
+   const [obs, setObs] = useState(gasto?.observacao ?? "");
+ 
+   const { data: historico = [] } = useQuery(gastosTodosQuery);
+@@ -82,6 +85,15 @@ function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?
+   };
+ 
+   const valor = Number(centavos || "0") / 100;
++  const alterarPagamento = async (status: "pendente" | "pago") => {
++    if (!gasto) return;
++    try {
++      await atualizarPagamento.mutateAsync({ id: gasto.id, status });
++      toast.success(status === "pago" ? "Pagamento confirmado" : "Pagamento voltou a ficar pendente");
++    } catch {
++      toast.error("Não foi possível atualizar o pagamento.");
++    }
++  };
+ 
+   const submit = async (e: React.FormEvent) => {
+     e.preventDefault();
+@@ -100,6 +112,7 @@ function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?
+         escopo,
+         termino: comTermino ? termino : null,
+         observacao: obs.trim() || null,
++        regra_dia_invalido: regraDia31,
+       });
+       toast.success(gasto ? "Gasto atualizado" : "Gasto adicionado");
+       onDone();
+@@ -170,9 +183,17 @@ function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?
+         </div>
+         <Switch aria-label="Repetir todo mês" checked={recorrente} disabled={!!serie && escopo === 'este'} onCheckedChange={setRecorrente} />
+       </label>
+-      {recorrente && <div className="space-y-3"><p className="text-sm text-muted-foreground">{comTermino && termino && proxima > termino ? 'Não há próximo lançamento dentro do prazo.' : `Próximo lançamento previsto: ${displayDate(proxima)}.`} Nos meses mais curtos, será usado o último dia; depois, o dia original será retomado.</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={!!serie && escopo === 'este'} variant={!comTermino ? 'default' : 'outline'} onClick={() => setComTermino(false)}>Até eu cancelar</Button><Button type="button" disabled={!!serie && escopo === 'este'} variant={comTermino ? 'default' : 'outline'} onClick={() => setComTermino(true)}>Definir término</Button></div>{comTermino && <div className="space-y-2"><Label htmlFor="termino">Data de término</Label><Input id="termino" type="date" min={data} value={termino} disabled={!!serie && escopo === 'este'} onChange={e => setTermino(e.target.value)} required /></div>}</div>}
++      {recorrente && <div className="space-y-3"><p className="text-sm text-muted-foreground">{comTermino && termino && proxima > termino ? 'Não há próximo lançamento dentro do prazo.' : `Próximo lançamento previsto: ${displayDate(proxima)}.`}</p>{diaRecorrencia === 31 && <div className="space-y-2"><Label>Quando o mês não tiver dia 31?</Label><div className="flex flex-wrap gap-2"><Button type="button" variant={regraDia31 === 'ultimo_dia' ? 'default' : 'outline'} disabled={!!serie && escopo === 'este'} onClick={() => setRegraDia31('ultimo_dia')}>Usar último dia</Button><Button type="button" variant={regraDia31 === 'pular_mes' ? 'default' : 'outline'} disabled={!!serie && escopo === 'este'} onClick={() => setRegraDia31('pular_mes')}>Pular o mês</Button></div></div>}<div className="flex flex-wrap gap-2"><Button type="button" disabled={!!serie && escopo === 'este'} variant={!comTermino ? 'default' : 'outline'} onClick={() => setComTermino(false)}>Até eu cancelar</Button><Button type="button" disabled={!!serie && escopo === 'este'} variant={comTermino ? 'default' : 'outline'} onClick={() => setComTermino(true)}>Definir término</Button></div>{comTermino && <div className="space-y-2"><Label htmlFor="termino">Data de término</Label><Input id="termino" type="date" min={data} value={termino} disabled={!!serie && escopo === 'este'} onChange={e => setTermino(e.target.value)} required /></div>}</div>}
+       {serie?.ativa && <Button type="button" variant="ghost" className="w-full text-destructive" onClick={() => setConfirmarCancelamento(true)}>Cancelar repetição</Button>}
+       {serie && !serie.ativa && <p className="text-sm text-muted-foreground">Repetição encerrada. Os gastos já registrados permanecem no histórico.</p>}
++      {gasto && gasto.status_pagamento !== "cancelado" && <div className="space-y-2 rounded-2xl border p-4">
++        <Label>Status do pagamento</Label>
++        <p className="text-xs text-muted-foreground">A confirmação afeta somente este lançamento e pode ser corrigida depois.</p>
++        <div className="flex flex-wrap gap-2">
++          <Button type="button" variant={gasto.status_pagamento === "pago" ? "default" : "outline"} disabled={atualizarPagamento.isPending} onClick={() => void alterarPagamento("pago")}>Marcar como pago</Button>
++          <Button type="button" variant={gasto.status_pagamento !== "pago" ? "default" : "outline"} disabled={atualizarPagamento.isPending} onClick={() => void alterarPagamento("pendente")}>Manter pendente</Button>
++        </div>
++      </div>}
+       <ConfirmSheet open={confirmarCancelamento} onOpenChange={setConfirmarCancelamento} title="Cancelar repetição mensal?" description="Impede novos lançamentos, sem apagar os gastos já registrados." busy={cancelar.isPending} onConfirm={async () => { if (!serie) return; try { await cancelar.mutateAsync(serie.id); toast.success('Repetição cancelada'); onDone(); } catch { toast.error('Não foi possível cancelar a repetição.'); } }} />
+ 
+       <Button type="submit" disabled={salvar.isPending} className="h-12 w-full rounded-xl text-base">
+diff --git a/src/integrations/supabase/types.ts b/src/integrations/supabase/types.ts
+index c10bc56..a87a890 100644
+--- a/src/integrations/supabase/types.ts
++++ b/src/integrations/supabase/types.ts
+@@ -172,6 +172,7 @@ export type Database = {
+       gastos: {
+         Row: {
+           categoria_id: string | null
++          compromisso_id: string | null
+           created_at: string
+           data: string
+           data_programada: string | null
+@@ -180,16 +181,20 @@ export type Database = {
+           forma_pagamento: string
+           gerado_automaticamente: boolean
+           id: string
++          numero_parcela: number | null
+           observacao: string | null
+           recorrente: boolean
+           recorrente_origem_id: string | null
+           serie_id: string | null
+           status_pagamento: string
++          tipo_compromisso: string
++          total_parcelas: number | null
+           user_id: string
+           valor: number
+         }
+         Insert: {
+           categoria_id?: string | null
++          compromisso_id?: string | null
+           created_at?: string
+           data?: string
+           data_programada?: string | null
+@@ -198,11 +203,14 @@ export type Database = {
+           forma_pagamento?: string
+           gerado_automaticamente?: boolean
+           id?: string
++          numero_parcela?: number | null
+           observacao?: string | null
+           recorrente?: boolean
+           recorrente_origem_id?: string | null
+           serie_id?: string | null
+           status_pagamento?: string
++          tipo_compromisso?: string
++          total_parcelas?: number | null
+           user_id?: string
+           valor: number
+         }
+@@ -221,6 +229,8 @@ export type Database = {
+           recorrente_origem_id?: string | null
+           serie_id?: string | null
+           status_pagamento?: string
++          tipo_compromisso?: string
++          total_parcelas?: number | null
+           user_id?: string
+           valor?: number
+         }
+diff --git a/src/lib/compromissos.ts b/src/lib/compromissos.ts
+new file mode 100644
+index 0000000..b44476f
+--- /dev/null
++++ b/src/lib/compromissos.ts
+@@ -0,0 +1,43 @@
++import { addMonths, endOfMonth, setDate, startOfMonth } from "date-fns";
++import { fromISODate, toISODate } from "./format";
++
++export type ParcelaPlanejada = {
++  numero: number;
++  total: number;
++  data: string;
++  valor: number;
++};
++
++export function gerarParcelas(
++  inicio: string,
++  dia: number,
++  total: number,
++  valor: number,
++): ParcelaPlanejada[] {
++  if (!Number.isInteger(total) || total < 1) throw new Error("Informe uma quantidade válida de parcelas.");
++  if (!Number.isInteger(dia) || dia < 1 || dia > 31) throw new Error("Informe um dia válido.");
++  if (!Number.isFinite(valor) || valor <= 0) throw new Error("Informe um valor válido.");
++  return Array.from({ length: total }, (_, index) => {
++    const month = startOfMonth(addMonths(fromISODate(inicio), index));
++    return {
++      numero: index + 1,
++      total,
++      data: toISODate(setDate(month, Math.min(dia, endOfMonth(month).getDate()))),
++      valor,
++    };
++  });
++}
++
++export function saldoParcelas(parcelas: Array<ParcelaPlanejada & { paga: boolean }>) {
++  return parcelas.filter((parcela) => !parcela.paga).reduce((total, parcela) => total + parcela.valor, 0);
++}
++
++export function selecionarParcelasFuturasNaoPagas<T extends { data: string; paga: boolean }>(parcelas: T[], hoje: string) {
++  return parcelas.filter((parcela) => parcela.data > hoje && !parcela.paga);
++}
++
++/** A quitação é um evento separado; nunca transforma parcelas futuras em pagamentos individuais. */
++export function eventoQuitacao(valor: number, hoje: string) {
++  if (!Number.isFinite(valor) || valor <= 0) throw new Error("O valor da quitação deve ser maior que zero.");
++  return { valor, data: hoje, tipo: "quitacao" as const };
++}
+diff --git a/src/lib/queries.ts b/src/lib/queries.ts
+index 0cb33a3..e33fa8d 100644
+--- a/src/lib/queries.ts
++++ b/src/lib/queries.ts
+@@ -87,9 +87,9 @@ export const useCategorias = () => useQuery(categoriasQuery);
+ export function useSalvarGasto() {
+   const qc = useQueryClient();
+   return useMutation({
+-    mutationFn: async ({ id, escopo = 'este', termino, ...g }: GastoInsert & { id?: string; escopo?: 'este' | 'proximos'; termino?: string | null }) => {
++    mutationFn: async ({ id, escopo = 'este', termino, regra_dia_invalido = 'ultimo_dia', ...g }: GastoInsert & { id?: string; escopo?: 'este' | 'proximos'; termino?: string | null; regra_dia_invalido?: 'ultimo_dia' | 'pular_mes' }) => {
+       const { error } = await supabase.rpc('salvar_gasto_recorrencia', {
+-        _dados: { valor: g.valor, categoria_id: g.categoria_id ?? null, data: g.data, descricao: g.descricao ?? '', forma_pagamento: g.forma_pagamento ?? 'pix', observacao: g.observacao ?? null },
++        _dados: { valor: g.valor, categoria_id: g.categoria_id ?? null, data: g.data, descricao: g.descricao ?? '', forma_pagamento: g.forma_pagamento ?? 'pix', observacao: g.observacao ?? null, regra_dia_invalido },
+         ...(id ? { _id: id } : {}), _escopo: escopo, _repetir: g.recorrente ?? false,
+         ...(termino ? { _termino: termino } : {}),
+       });
+@@ -109,6 +109,20 @@ export function useCancelarRecorrencia() {
+   }, onSuccess: () => qc.invalidateQueries({ queryKey: ['recorrencias'] }) });
+ }
+ 
++export function useAtualizarStatusPagamento() {
++  const qc = useQueryClient();
++  return useMutation({
++    mutationFn: async ({ id, status }: { id: string; status: "pendente" | "pago" }) => {
++      const { error } = await supabase.from("gastos").update({
++        status_pagamento: status,
++        data_pagamento: status === "pago" ? new Date().toISOString().slice(0, 10) : null,
++      }).eq("id", id);
++      if (error) throw error;
++    },
++    onSuccess: () => qc.invalidateQueries({ queryKey: ["gastos"] }),
++  });
++}
++
+ export function useExcluirGasto() {
+   const qc = useQueryClient();
+   return useMutation({
+diff --git a/src/routes/__root.tsx b/src/routes/__root.tsx
+index 595c755..1f774ff 100644
+--- a/src/routes/__root.tsx
++++ b/src/routes/__root.tsx
+@@ -79,7 +79,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
+       { property: "og:description", content: "Controle seus gastos domésticos, orçamentos e relatórios em reais." },
+       { property: "og:type", content: "website" },
+       { name: "twitter:card", content: "summary_large_image" },
+-      { name: "theme-color", content: "#0F5A3A" },
++      { name: "theme-color", content: "#000000" },
+       { name: "apple-mobile-web-app-capable", content: "yes" },
+       { name: "apple-mobile-web-app-title", content: "Meu Bolso" },
+       {name:"apple-mobile-web-app-status-bar-style",content:"black-translucent"},
+diff --git a/src/test/compromissos.test.ts b/src/test/compromissos.test.ts
+new file mode 100644
+index 0000000..bb7f06a
+--- /dev/null
++++ b/src/test/compromissos.test.ts
+@@ -0,0 +1,25 @@
++import { describe, expect, it } from "vitest";
++import { eventoQuitacao, gerarParcelas, saldoParcelas, selecionarParcelasFuturasNaoPagas } from "@/lib/compromissos";
++
++describe("compromissos parcelados", () => {
++  it("gera todas as parcelas nas datas originais", () => {
++    expect(gerarParcelas("2026-01-31", 31, 4, 200).map((p) => [p.numero, p.data])).toEqual([
++      [1, "2026-01-31"], [2, "2026-02-28"], [3, "2026-03-31"], [4, "2026-04-30"],
++    ]);
++  });
++
++  it("calcula somente o saldo não pago", () => {
++    const parcelas = gerarParcelas("2026-01-10", 10, 3, 200).map((p, i) => ({ ...p, paga: i === 0 }));
++    expect(saldoParcelas(parcelas)).toBe(400);
++  });
++
++  it("não desloca parcelas por causa de atraso", () => {
++    const parcelas = gerarParcelas("2026-01-10", 10, 3, 200).map((p, i) => ({ ...p, paga: i === 0 }));
++    expect(selecionarParcelasFuturasNaoPagas(parcelas, "2026-02-11").map((p) => p.numero)).toEqual([3]);
++    expect(parcelas[1]?.data).toBe("2026-02-10");
++  });
++
++  it("registra a quitação como evento separado", () => {
++    expect(eventoQuitacao(350, "2026-02-11")).toEqual({ valor: 350, data: "2026-02-11", tipo: "quitacao" });
++  });
++});
+diff --git a/src/test/notification-icon.test.ts b/src/test/notification-icon.test.ts
+index bc5f469..6c7c7ed 100644
+--- a/src/test/notification-icon.test.ts
++++ b/src/test/notification-icon.test.ts
+@@ -13,7 +13,7 @@ describe('Notification badge only, preserving delivery and navigation', () => {
+     handlers['push']?.({ data: { json: () => ({ title: 'Meu Bolso', body: 'Teste', tag: 'teste', url: '/inicio' }) }, waitUntil: (promise: Promise<unknown>) => { delivery = promise; } });
+     await delivery;
+     expect(showNotification).toHaveBeenCalledWith('Meu Bolso', {
+-      body: 'Teste', icon: '/icons/icon-192.png', badge: '/icons/notification-wallet-v1.png', tag: 'teste', data: { url: '/inicio' },
++      body: 'Teste', icon: '/icons/icon-192.png', badge: '/icons/notification-wallet-v1.png', tag: 'teste', actions: [], data: { url: '/inicio', occurrenceId: null },
+     });
+     expect(handlers['notificationclick']).toBeTypeOf('function');
+     const badge = readFileSync(resolve(process.cwd(), 'public/icons/notification-wallet-v1.png'));
+@@ -22,4 +22,4 @@ describe('Notification badge only, preserving delivery and navigation', () => {
+     expect(badge.readUInt32BE(20)).toBe(96);
+     expect(badge[25]).toBe(6); // PNG RGBA, not an opaque RGB image.
+   });
+-});
+\ No newline at end of file
++});
+diff --git a/src/test/pagamentos.test.ts b/src/test/pagamentos.test.ts
+index 8eef3ff..279ae4f 100644
+--- a/src/test/pagamentos.test.ts
++++ b/src/test/pagamentos.test.ts
+@@ -6,6 +6,7 @@ const gasto = (id: string, data: string, status_pagamento: Gasto["status_pagamen
+   id,
+   user_id: "user",
+   categoria_id: null,
++  compromisso_id: null,
+   created_at: `${data}T10:00:00Z`,
+   data,
+   data_programada: data,
+@@ -14,10 +15,13 @@ const gasto = (id: string, data: string, status_pagamento: Gasto["status_pagamen
+   forma_pagamento: "pix",
+   gerado_automaticamente: false,
+   observacao: null,
++  numero_parcela: null,
+   recorrente: false,
+   recorrente_origem_id: null,
+   serie_id: null,
+   status_pagamento,
++  tipo_compromisso: "avulso",
++  total_parcelas: null,
+   valor: 100,
+ });
+ 
+diff --git a/supabase/migrations/20261017200000_financial_foundation_phase_1.sql b/supabase/migrations/20261017200000_financial_foundation_phase_1.sql
+index 20ea00f..c34356b 100644
+--- a/supabase/migrations/20261017200000_financial_foundation_phase_1.sql
++++ b/supabase/migrations/20261017200000_financial_foundation_phase_1.sql
+@@ -32,6 +32,68 @@ alter table public.recorrencias_gastos
+   add constraint recorrencias_gastos_regra_dia_invalido_check
+   check (regra_dia_invalido in ('ultimo_dia', 'pular_mes'));
+ 
++alter table public.gastos
++  add column if not exists tipo_compromisso text not null default 'avulso',
++  add column if not exists compromisso_id uuid,
++  add column if not exists numero_parcela integer,
++  add column if not exists total_parcelas integer;
++
++alter table public.gastos
++  drop constraint if exists gastos_tipo_compromisso_check;
++alter table public.gastos
++  add constraint gastos_tipo_compromisso_check
++  check (tipo_compromisso in ('avulso', 'recorrente', 'parcelado', 'variavel', 'quitacao'));
++
++alter table public.gastos
++  drop constraint if exists gastos_parcelas_check;
++alter table public.gastos
++  add constraint gastos_parcelas_check
++  check ((numero_parcela is null and total_parcelas is null)
++      or (numero_parcela between 1 and total_parcelas and total_parcelas > 0));
++
++create table if not exists public.compromissos_financeiros (
++  id uuid primary key default gen_random_uuid(),
++  user_id uuid not null references auth.users(id) on delete cascade,
++  tipo text not null check (tipo in ('parcelado', 'variavel')),
++  descricao text not null default '',
++  categoria_id uuid references public.categorias(id) on delete set null,
++  valor_parcela numeric,
++  dia_vencimento integer not null check (dia_vencimento between 1 and 31),
++  inicio date not null,
++  termino date,
++  total_parcelas integer check (total_parcelas is null or total_parcelas > 0),
++  encerrado_em timestamptz,
++  criado_em timestamptz not null default now()
++);
++
++create table if not exists public.eventos_quitacao (
++  id uuid primary key default gen_random_uuid(),
++  compromisso_id uuid not null references public.compromissos_financeiros(id) on delete cascade,
++  user_id uuid not null references auth.users(id) on delete cascade,
++  gasto_id uuid references public.gastos(id) on delete set null,
++  valor numeric not null check (valor > 0),
++  data date not null default current_date,
++  criado_em timestamptz not null default now()
++);
++
++alter table public.compromissos_financeiros enable row level security;
++alter table public.eventos_quitacao enable row level security;
++
++drop policy if exists "Usuário gerencia seus compromissos" on public.compromissos_financeiros;
++create policy "Usuário gerencia seus compromissos" on public.compromissos_financeiros
++  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++drop policy if exists "Usuário gerencia suas quitações" on public.eventos_quitacao;
++create policy "Usuário gerencia suas quitações" on public.eventos_quitacao
++  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++
++create index if not exists gastos_compromisso_idx on public.gastos (compromisso_id, data);
++create index if not exists compromissos_financeiros_user_idx on public.compromissos_financeiros (user_id, tipo, encerrado_em);
++
++comment on column public.gastos.tipo_compromisso is
++  'Distingue despesa avulsa, recorrente, parcelada, variável e evento de quitação.';
++comment on column public.gastos.compromisso_id is
++  'Vínculo opcional com um compromisso financeiro; não substitui a série de recorrência.';
++
+ -- Registro de chaves de ocorrência para que a futura geração seja idempotente
+ -- mesmo quando houver duas execuções simultâneas ou repetidas.
+ create table if not exists public.recorrencias_ocorrencias (
+-- 
+2.43.0
+
