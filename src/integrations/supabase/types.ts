@@ -172,31 +172,45 @@ export type Database = {
       gastos: {
         Row: {
           categoria_id: string | null
+          compromisso_id: string | null
           created_at: string
           data: string
           data_programada: string | null
+          data_pagamento: string | null
           descricao: string
           forma_pagamento: string
+          gerado_automaticamente: boolean
           id: string
+          numero_parcela: number | null
           observacao: string | null
           recorrente: boolean
           recorrente_origem_id: string | null
           serie_id: string | null
+          status_pagamento: string
+          tipo_compromisso: string
+          total_parcelas: number | null
           user_id: string
           valor: number
         }
         Insert: {
           categoria_id?: string | null
+          compromisso_id?: string | null
           created_at?: string
           data?: string
           data_programada?: string | null
+          data_pagamento?: string | null
           descricao?: string
           forma_pagamento?: string
+          gerado_automaticamente?: boolean
           id?: string
+          numero_parcela?: number | null
           observacao?: string | null
           recorrente?: boolean
           recorrente_origem_id?: string | null
           serie_id?: string | null
+          status_pagamento?: string
+          tipo_compromisso?: string
+          total_parcelas?: number | null
           user_id?: string
           valor: number
         }
@@ -205,13 +219,18 @@ export type Database = {
           created_at?: string
           data?: string
           data_programada?: string | null
+          data_pagamento?: string | null
           descricao?: string
           forma_pagamento?: string
+          gerado_automaticamente?: boolean
           id?: string
           observacao?: string | null
           recorrente?: boolean
           recorrente_origem_id?: string | null
           serie_id?: string | null
+          status_pagamento?: string
+          tipo_compromisso?: string
+          total_parcelas?: number | null
           user_id?: string
           valor?: number
         }
@@ -278,6 +297,45 @@ export type Database = {
         }
         Relationships: []
       }
+      recorrencias_ocorrencias: {
+        Row: {
+          criado_em: string
+          data_programada: string
+          gasto_id: string | null
+          id: string
+          serie_id: string
+        }
+        Insert: {
+          criado_em?: string
+          data_programada: string
+          gasto_id?: string | null
+          id?: string
+          serie_id: string
+        }
+        Update: {
+          criado_em?: string
+          data_programada?: string
+          gasto_id?: string | null
+          id?: string
+          serie_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recorrencias_ocorrencias_gasto_id_fkey"
+            columns: ["gasto_id"]
+            isOneToOne: false
+            referencedRelation: "gastos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recorrencias_ocorrencias_serie_id_fkey"
+            columns: ["serie_id"]
+            isOneToOne: false
+            referencedRelation: "recorrencias_gastos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recorrencias_exclusoes: {
         Row: {
           mes: string
@@ -311,6 +369,7 @@ export type Database = {
           id: string
           inicio: string
           observacao: string | null
+          regra_dia_invalido: string
           termino: string | null
           user_id: string
           valor: number
@@ -324,6 +383,7 @@ export type Database = {
           id?: string
           inicio: string
           observacao?: string | null
+          regra_dia_invalido?: string
           termino?: string | null
           user_id?: string
           valor: number
@@ -337,6 +397,7 @@ export type Database = {
           id?: string
           inicio?: string
           observacao?: string | null
+          regra_dia_invalido?: string
           termino?: string | null
           user_id?: string
           valor?: number

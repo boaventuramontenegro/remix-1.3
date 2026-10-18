@@ -87,9 +87,9 @@ export const useCategorias = () => useQuery(categoriasQuery);
 export function useSalvarGasto() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, escopo = 'este', termino, ...g }: GastoInsert & { id?: string; escopo?: 'este' | 'proximos'; termino?: string | null }) => {
+    mutationFn: async ({ id, escopo = 'este', termino, regra_dia_invalido = 'ultimo_dia', ...g }: GastoInsert & { id?: string; escopo?: 'este' | 'proximos'; termino?: string | null; regra_dia_invalido?: 'ultimo_dia' | 'pular_mes' }) => {
       const { error } = await supabase.rpc('salvar_gasto_recorrencia', {
-        _dados: { valor: g.valor, categoria_id: g.categoria_id ?? null, data: g.data, descricao: g.descricao ?? '', forma_pagamento: g.forma_pagamento ?? 'pix', observacao: g.observacao ?? null },
+        _dados: { valor: g.valor, categoria_id: g.categoria_id ?? null, data: g.data, descricao: g.descricao ?? '', forma_pagamento: g.forma_pagamento ?? 'pix', observacao: g.observacao ?? null, regra_dia_invalido },
         ...(id ? { _id: id } : {}), _escopo: escopo, _repetir: g.recorrente ?? false,
         ...(termino ? { _termino: termino } : {}),
       });
@@ -107,6 +107,20 @@ export function useCancelarRecorrencia() {
     const { error } = await supabase.rpc('cancelar_recorrencia', { _serie: id });
     if (error) throw error;
   }, onSuccess: () => qc.invalidateQueries({ queryKey: ['recorrencias'] }) });
+}
+
+export function useAtualizarStatusPagamento() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "pendente" | "pago" }) => {
+      const { error } = await supabase.from("gastos").update({
+        status_pagamento: status,
+        data_pagamento: status === "pago" ? new Date().toISOString().slice(0, 10) : null,
+      }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["gastos"] }),
+  });
 }
 
 export function useExcluirGasto() {

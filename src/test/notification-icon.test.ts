@@ -13,7 +13,7 @@ describe('Notification badge only, preserving delivery and navigation', () => {
     handlers['push']?.({ data: { json: () => ({ title: 'Meu Bolso', body: 'Teste', tag: 'teste', url: '/inicio' }) }, waitUntil: (promise: Promise<unknown>) => { delivery = promise; } });
     await delivery;
     expect(showNotification).toHaveBeenCalledWith('Meu Bolso', {
-      body: 'Teste', icon: '/icons/icon-192.png', badge: '/icons/notification-wallet-v1.png', tag: 'teste', data: { url: '/inicio' },
+      body: 'Teste', icon: '/icons/icon-192.png', badge: '/icons/notification-wallet-v1.png', tag: 'teste', actions: [], data: { url: '/inicio', occurrenceId: null },
     });
     expect(handlers['notificationclick']).toBeTypeOf('function');
     const badge = readFileSync(resolve(process.cwd(), 'public/icons/notification-wallet-v1.png'));

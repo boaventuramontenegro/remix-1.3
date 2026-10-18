@@ -6,6 +6,8 @@ import { ChevronLeft, ChevronRight, Receipt, Search } from "lucide-react";
 import { categoriasQuery, gastosTodosQuery } from "@/lib/queries";
 import { usePreferences } from "@/lib/preferences";
 import { formatBRL, labelPeriodo, rangeOf, shift, toISODate } from "@/lib/format";
+import { dataSaoPaulo } from "@/lib/media";
+import { ordenarPagamentosPendentes } from "@/lib/pagamentos";
 import { pageMeta } from "@/lib/page-meta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,10 +37,18 @@ function GastosPage() {useValoresOcultos();
       (!q || g.descricao.toLowerCase().includes(q) || (g.observacao ?? "").toLowerCase().includes(q)),
     );
   }, [all, range.start.getTime(), busca, cat]);
+  const pendentes = useMemo(() => ordenarPagamentosPendentes(all, toISODate(dataSaoPaulo())), [all]);
   const total = lista.reduce((s, g) => s + Number(g.valor), 0);
 
   return (
     <div className="space-y-4">
+      {pendentes.length > 0 && <section className="surface space-y-3" aria-labelledby="pagamentos-pendentes-titulo">
+        <div>
+          <h2 id="pagamentos-pendentes-titulo" className="font-semibold">Pagamentos pendentes</h2>
+          <p className="text-xs text-muted-foreground">Atrasados, vencendo hoje e próximos vencimentos.</p>
+        </div>
+        <ExpenseList gastos={pendentes} categorias={cats} />
+      </section>}
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="icon" aria-label="Mês anterior" onClick={() => setAnchor(shift("mes", anchor, -1))}><ChevronLeft /></Button>
         <h2 className="text-sm font-semibold">{labelPeriodo("mes", anchor)}</h2>

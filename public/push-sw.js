@@ -9,14 +9,20 @@ self.addEventListener("push", (event) => {
       // Android's small icon uses only alpha: no opaque app-icon background.
       badge: "/icons/notification-wallet-v1.png",
       tag: d.tag,
-      data: { url: d.url || "/inicio" },
+      actions: Array.isArray(d.actions) ? d.actions : [],
+      data: { url: d.url || "/inicio", occurrenceId: d.occurrenceId || null },
     }),
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/inicio";
+  const data = event.notification.data || {};
+  let url = data.url || "/inicio";
+  if (event.action && data.occurrenceId) {
+    const separator = url.includes("?") ? "&" : "?";
+    url = `${url}${separator}notificacao=${encodeURIComponent(event.action)}&ocorrencia=${encodeURIComponent(data.occurrenceId)}`;
+  }
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const c of list) {

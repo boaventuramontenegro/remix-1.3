@@ -12,9 +12,9 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { CategoriaIcone } from "@/lib/icons";
 import { FORMAS_PAGAMENTO, formatBRL, toISODate, displayDate } from "@/lib/format";
-import { proximaRecorrencia } from '@/lib/recorrencia';
+import { proximaRecorrencia, type RegraDiaInvalido } from '@/lib/recorrencia';
 import { usePreferences } from "@/lib/preferences";
-import { gastosTodosQuery, recorrenciasQuery, useCancelarRecorrencia, useCategorias, useExcluirGasto, useSalvarGasto, type Gasto } from "@/lib/queries";
+import { gastosTodosQuery, recorrenciasQuery, useAtualizarStatusPagamento, useCancelarRecorrencia, useCategorias, useExcluirGasto, useSalvarGasto, type Gasto } from "@/lib/queries";
 
 type Ctx = { abrir: (g?: Gasto) => void };
 const GastoCtx = createContext<Ctx>({ abrir: () => {} });
@@ -63,9 +63,12 @@ function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?
   const [escopo, setEscopo] = useState<'este' | 'proximos'>('este');
   const [termino, setTermino] = useState(serie?.termino ?? '');
   const [comTermino, setComTermino] = useState(!!serie?.termino);
+  const [regraDia31, setRegraDia31] = useState<RegraDiaInvalido>(serie?.regra_dia_invalido === "pular_mes" ? "pular_mes" : "ultimo_dia");
   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false);
   const cancelar = useCancelarRecorrencia();
-  const proxima = proximaRecorrencia(gasto?.data_programada ?? data, serie?.dia ?? Number(data.slice(8, 10)));
+  const atualizarPagamento = useAtualizarStatusPagamento();
+  const diaRecorrencia = serie?.dia ?? Number(data.slice(8, 10));
+  const proxima = proximaRecorrencia(gasto?.data_programada ?? data, diaRecorrencia, regraDia31);
   const [obs, setObs] = useState(gasto?.observacao ?? "");
 
   const { data: historico = [] } = useQuery(gastosTodosQuery);
@@ -82,6 +85,15 @@ function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?
   };
 
   const valor = Number(centavos || "0") / 100;
+  const alterarPagamento = async (status: "pendente" | "pago") => {
+    if (!gasto) return;
+    try {
+      await atualizarPagamento.mutateAsync({ id: gasto.id, status });
+      toast.success(status === "pago" ? "Pagamento confirmado" : "Pagamento voltou a ficar pendente");
+    } catch {
+      toast.error("Não foi possível atualizar o pagamento.");
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,6 +112,7 @@ function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?
         escopo,
         termino: comTermino ? termino : null,
         observacao: obs.trim() || null,
+        regra_dia_invalido: regraDia31,
       });
       toast.success(gasto ? "Gasto atualizado" : "Gasto adicionado");
       onDone();
@@ -170,9 +183,17 @@ function GastoForm({ gasto, serie, onDone }: { gasto?: Gasto | undefined; serie?
         </div>
         <Switch aria-label="Repetir todo mês" checked={recorrente} disabled={!!serie && escopo === 'este'} onCheckedChange={setRecorrente} />
       </label>
-      {recorrente && <div className="space-y-3"><p className="text-sm text-muted-foreground">{comTermino && termino && proxima > termino ? 'Não há próximo lançamento dentro do prazo.' : `Próximo lançamento previsto: ${displayDate(proxima)}.`} Nos meses mais curtos, será usado o último dia; depois, o dia original será retomado.</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={!!serie && escopo === 'este'} variant={!comTermino ? 'default' : 'outline'} onClick={() => setComTermino(false)}>Até eu cancelar</Button><Button type="button" disabled={!!serie && escopo === 'este'} variant={comTermino ? 'default' : 'outline'} onClick={() => setComTermino(true)}>Definir término</Button></div>{comTermino && <div className="space-y-2"><Label htmlFor="termino">Data de término</Label><Input id="termino" type="date" min={data} value={termino} disabled={!!serie && escopo === 'este'} onChange={e => setTermino(e.target.value)} required /></div>}</div>}
+      {recorrente && <div className="space-y-3"><p className="text-sm text-muted-foreground">{comTermino && termino && proxima > termino ? 'Não há próximo lançamento dentro do prazo.' : `Próximo lançamento previsto: ${displayDate(proxima)}.`}</p>{diaRecorrencia === 31 && <div className="space-y-2"><Label>Quando o mês não tiver dia 31?</Label><div className="flex flex-wrap gap-2"><Button type="button" variant={regraDia31 === 'ultimo_dia' ? 'default' : 'outline'} disabled={!!serie && escopo === 'este'} onClick={() => setRegraDia31('ultimo_dia')}>Usar último dia</Button><Button type="button" variant={regraDia31 === 'pular_mes' ? 'default' : 'outline'} disabled={!!serie && escopo === 'este'} onClick={() => setRegraDia31('pular_mes')}>Pular o mês</Button></div></div>}<div className="flex flex-wrap gap-2"><Button type="button" disabled={!!serie && escopo === 'este'} variant={!comTermino ? 'default' : 'outline'} onClick={() => setComTermino(false)}>Até eu cancelar</Button><Button type="button" disabled={!!serie && escopo === 'este'} variant={comTermino ? 'default' : 'outline'} onClick={() => setComTermino(true)}>Definir término</Button></div>{comTermino && <div className="space-y-2"><Label htmlFor="termino">Data de término</Label><Input id="termino" type="date" min={data} value={termino} disabled={!!serie && escopo === 'este'} onChange={e => setTermino(e.target.value)} required /></div>}</div>}
       {serie?.ativa && <Button type="button" variant="ghost" className="w-full text-destructive" onClick={() => setConfirmarCancelamento(true)}>Cancelar repetição</Button>}
       {serie && !serie.ativa && <p className="text-sm text-muted-foreground">Repetição encerrada. Os gastos já registrados permanecem no histórico.</p>}
+      {gasto && gasto.status_pagamento !== "cancelado" && <div className="space-y-2 rounded-2xl border p-4">
+        <Label>Status do pagamento</Label>
+        <p className="text-xs text-muted-foreground">A confirmação afeta somente este lançamento e pode ser corrigida depois.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant={gasto.status_pagamento === "pago" ? "default" : "outline"} disabled={atualizarPagamento.isPending} onClick={() => void alterarPagamento("pago")}>Marcar como pago</Button>
+          <Button type="button" variant={gasto.status_pagamento !== "pago" ? "default" : "outline"} disabled={atualizarPagamento.isPending} onClick={() => void alterarPagamento("pendente")}>Manter pendente</Button>
+        </div>
+      </div>}
       <ConfirmSheet open={confirmarCancelamento} onOpenChange={setConfirmarCancelamento} title="Cancelar repetição mensal?" description="Impede novos lançamentos, sem apagar os gastos já registrados." busy={cancelar.isPending} onConfirm={async () => { if (!serie) return; try { await cancelar.mutateAsync(serie.id); toast.success('Repetição cancelada'); onDone(); } catch { toast.error('Não foi possível cancelar a repetição.'); } }} />
 
       <Button type="submit" disabled={salvar.isPending} className="h-12 w-full rounded-xl text-base">
